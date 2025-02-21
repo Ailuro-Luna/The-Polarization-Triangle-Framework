@@ -39,7 +39,7 @@ class Simulation:
                  coupling="none",
                  extreme_fraction=0.0,
                  moral_correlation="partial",
-                 # 新增 cluster 参数（仅在 community 网络下生效）
+                 # 新增 cluster 参数（仅在 community 或 LFR 网络下生效）
                  cluster_identity=False,
                  cluster_morality=False,
                  cluster_identity_prob=0.8,
@@ -49,10 +49,28 @@ class Simulation:
                  morality_leaning_prob=0.7):
         self.num_agents = num_agents
         self.network_type = network_type
-        # 创建网络（仅用于结构和布局）
+
+        # 根据 network_type 创建网络
         if network_type == 'random':
             p = network_params.get("p", 0.1) if network_params else 0.1
             self.G = nx.erdos_renyi_graph(n=num_agents, p=p)
+        elif network_type == 'lfr':
+            # 使用 LFR benchmark 模型
+            tau1 = network_params.get("tau1", 3) if network_params else 3
+            tau2 = network_params.get("tau2", 1.5) if network_params else 1.5
+            mu = network_params.get("mu", 0.1) if network_params else 0.1
+            average_degree = network_params.get("average_degree", 5) if network_params else 5
+            min_community = network_params.get("min_community", 10) if network_params else 10
+            # 注意：LFR_benchmark_graph 可能生成重叠社区，节点属性 'community' 通常为集合
+            self.G = nx.LFR_benchmark_graph(
+                n=num_agents,
+                tau1=tau1,
+                tau2=tau2,
+                mu=mu,
+                average_degree=average_degree,
+                min_community=min_community,
+                seed=42
+            )
         elif network_type == 'community':
             community_sizes = [num_agents // 4] * 4
             intra_p = network_params.get("intra_p", 0.8) if network_params else 0.8
@@ -68,23 +86,34 @@ class Simulation:
         else:
             self.G = nx.erdos_renyi_graph(n=num_agents, p=0.1)
 
-        # 获取布局（用于后续可视化）
-        self.pos = nx.spring_layout(self.G, seed=42)
+        self.G.remove_edges_from(nx.selfloop_edges(self.G))
 
+        # 获取布局（用于后续可视化）
+        self.pos = nx.spring_layout(
+            self.G,
+            k=0.1,  # 调大后节点会更分散
+            iterations=50,  # 增加迭代次数
+            scale=2.0,  # 整体放大
+            seed=42
+        )
         # 转换为邻接矩阵（加速 opinion dynamics）
         self.adj_matrix = nx.to_numpy_array(self.G, dtype=np.int32)
 
-        # 如果是 community 网络且需要 cluster 化初始化，
-        # 则提前为每个 cluster（节点属性 "block"）随机确定“主导”值
+        # 针对 community 和 LFR 网络，提前进行 cluster 初始化
         self.cluster_identity_majority = {}
         self.cluster_morality_majority = {}
-        if network_type == 'community':
+        if network_type in ['community', 'lfr']:
             for node in self.G.nodes():
-                block = self.G.nodes[node].get("block")
+                # 对于 LFR，社区属性存储在 "community" 键中；可能为集合，选择一个代表元素
+                if network_type == 'community':
+                    block = self.G.nodes[node].get("block")
+                elif network_type == 'lfr':
+                    block = self.G.nodes[node].get("community")
+                    if isinstance(block, (set, frozenset)):
+                        block = min(block)
                 if cluster_identity and block not in self.cluster_identity_majority:
                     self.cluster_identity_majority[block] = 1 if np.random.rand() < 0.5 else -1
                 if cluster_morality and block not in self.cluster_morality_majority:
-                    # 使用 sample_morality 来确定 cluster 的主导 morality
                     self.cluster_morality_majority[block] = sample_morality(morality_mode, morality_leaning_prob)
 
         # 保存 cluster 参数与 morality 配置参数
@@ -100,11 +129,16 @@ class Simulation:
         self.morals = np.empty(num_agents, dtype=np.int32)    # 1: Progressive, 0: Neutral, -1: Conservative
         self.identities = np.empty(num_agents, dtype=np.int32)  # 1: Left, -1: Right
 
-        # 遍历每个 agent
+        # 遍历每个 agent 进行初始化
         for i in range(num_agents):
             # 初始化 identity
-            if self.cluster_identity and self.network_type == 'community':
-                block = self.G.nodes[i].get("block")
+            if self.cluster_identity and self.network_type in ['community', 'lfr']:
+                if self.network_type == 'community':
+                    block = self.G.nodes[i].get("block")
+                elif self.network_type == 'lfr':
+                    block = self.G.nodes[i].get("community")
+                    if isinstance(block, (set, frozenset)):
+                        block = min(block)
                 majority = self.cluster_identity_majority.get(block, 1)
                 identity = majority if np.random.rand() < self.cluster_identity_prob else -majority
             else:
@@ -112,8 +146,13 @@ class Simulation:
             self.identities[i] = identity
 
             # 初始化 morality
-            if self.cluster_morality and self.network_type == 'community':
-                block = self.G.nodes[i].get("block")
+            if self.cluster_morality and self.network_type in ['community', 'lfr']:
+                if self.network_type == 'community':
+                    block = self.G.nodes[i].get("block")
+                elif self.network_type == 'lfr':
+                    block = self.G.nodes[i].get("community")
+                    if isinstance(block, (set, frozenset)):
+                        block = min(block)
                 majority = self.cluster_morality_majority.get(block, sample_morality(morality_mode, morality_leaning_prob))
                 r = np.random.rand()
                 if r < self.cluster_morality_prob:
@@ -124,7 +163,7 @@ class Simulation:
                 morality = sample_morality(morality_mode, morality_leaning_prob)
             self.morals[i] = morality
 
-            # 生成 opinion（不受 morality cluster 初始化影响，仍采用原方案）
+            # 生成 opinion（初始化 opinion 与 morality cluster 无关，保持原方案）
             self.opinions[i] = self.generate_opinion(identity, distribution=opinion_distribution,
                                                      coupling=coupling, extreme_fraction=extreme_fraction)
 

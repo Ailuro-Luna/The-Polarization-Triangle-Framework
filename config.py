@@ -90,5 +90,26 @@ model_params_cluster = {
     "morality_mode": "half_neutral_mixed"
 }
 
+# LFR benchmark network configuration
+model_params_lfr = {
+    "num_agents": 500,
+    "network_type": "lfr",
+    "network_params": {
+        "tau1": 3,             # 度分布的幂律指数（通常大于2）
+        "tau2": 1.5,           # 社区规模的幂律指数
+        "mu": 0.1,             # 混合参数，代表节点与外部社区连接的比例
+        "average_degree": 5,   # 平均度
+        "min_community": 10    # 最小社区规模
+    },
+    "opinion_distribution": "twin_peak",
+    "coupling": "partial",
+    "extreme_fraction": 0.1,
+    "moral_correlation": "partial",
+    "cluster_identity": True,
+    "cluster_morality": True,
+    "morality_mode": "half_neutral_mixed"
+}
+
+
 # Default configuration to use
-model_params = model_params_cluster
+model_params = model_params_lfr
