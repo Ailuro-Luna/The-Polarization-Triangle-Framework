@@ -5,31 +5,19 @@ import matplotlib.pyplot as plt
 from numba import njit
 
 def sample_morality(mode, leaning_prob=0.7):
-    """
-    根据 mode 采样 morality 值。
-    mode 可选：
-      - "all_neutral": 返回 0
-      - "evenly_non_neutral": 均等分配 conservative (-1) 与 progressive (1)
-      - "leaning_conservative": 返回 -1 的概率为 leaning_prob，否则返回 1
-      - "leaning_progressive": 返回 1 的概率为 leaning_prob，否则返回 -1
-      - "half_neutral_mixed": 50% 取 neutral (0)，50% 在 conservative 与 progressive 均等采样
-    """
     r = np.random.rand()
     if mode == "all_neutral":
         return 0
     elif mode == "evenly_non_neutral":
-        return 1 if np.random.rand() < 0.5 else -1
+        return 1 if r < 0.5 else 0
     elif mode == "leaning_conservative":
-        return -1 if np.random.rand() < leaning_prob else 1
+        return 0 if r < leaning_prob else 1
     elif mode == "leaning_progressive":
-        return 1 if np.random.rand() < leaning_prob else -1
+        return 1 if r < leaning_prob else 0
     elif mode == "half_neutral_mixed":
-        if r < 0.5:
-            return 0
-        else:
-            return 1 if np.random.rand() < 0.5 else -1
+        return 1 if r < 0.5 else 0
     else:
-        return 1 if np.random.rand() < 0.5 else -1
+        return 1 if r < 0.5 else 0
 
 class Simulation:
     def __init__(self, num_agents=100,
@@ -196,9 +184,8 @@ class Simulation:
             self.step()
 
     def step(self):
-        # 传入 identities 与 morals 数组，使 update_opinions 时能考虑它们对门槛的影响
         self.opinions = update_opinions(self.opinions, self.adj_matrix,
-                                        self.tolerance, self.influence_factor,
+                                        self.influence_factor,
                                         self.identities, self.morals)
 
     def generate_histograms(self, output_dir="images"):
@@ -240,8 +227,14 @@ class Simulation:
         plt.close()
 
 @njit
-def update_opinions(opinions, adj_matrix, tolerance, influence_factor, identities, morals):
+def update_opinions(opinions, adj_matrix, influence_factor, identities, morals):
     n = opinions.shape[0]
+    # 定义概率：较高概率与较低概率
+    p_radical_high = 0.7
+    p_radical_low = 0.3
+    p_conv_high = 0.7
+    p_conv_low = 0.3
+
     for i in range(n):
         # 采用 reservoir sampling 随机选择一个邻居
         count = 0
@@ -253,28 +246,54 @@ def update_opinions(opinions, adj_matrix, tolerance, influence_factor, identitie
                     neighbor = j
         if neighbor == -1:
             continue
-        diff = opinions[neighbor] - opinions[i]
 
-        # 调整门槛：身份与道德影响门槛而非更新速度
-        if identities[i] == identities[neighbor]:
-            id_factor = 1.25
+        o_i = opinions[i]
+        o_j = opinions[neighbor]
+        m_i = morals[i]
+        # 判断是否“同方向”（均为正或均为负）
+        same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
+
+        # 同方向情况
+        if same_dir:
+            if m_i == 1:
+                if np.random.rand() < p_radical_high:
+                    # 激进化：向极端方向推进
+                    if o_i > 0:
+                        o_i = o_i + influence_factor * (1 - o_i)
+                    elif o_i < 0:
+                        o_i = o_i - influence_factor * (1 + o_i)
+            else:  # m_i == 0
+                if np.random.rand() < p_radical_low:
+                    if o_i > 0:
+                        o_i = o_i + influence_factor * (1 - o_i)
+                    elif o_i < 0:
+                        o_i = o_i - influence_factor * (1 + o_i)
         else:
-            id_factor = 0.5
-
-        if morals[i] == 0 or morals[neighbor] == 0:
-            mor_factor = 1.0
-        else:
-            if morals[i] == morals[neighbor]:
-                mor_factor = 1.25
-            else:
-                mor_factor = 0.5
-
-        effective_tolerance = tolerance * id_factor * mor_factor
-
-        if np.abs(diff) <= effective_tolerance:
-            opinions[i] += influence_factor * diff
-            if opinions[i] > 1:
-                opinions[i] = 1
-            elif opinions[i] < -1:
-                opinions[i] = -1
+            # 不同方向情况
+            if m_i == 1:
+                if identities[i] == identities[neighbor]:
+                    if np.random.rand() < p_conv_low:
+                        # 略微向邻居靠拢
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                else:
+                    if np.random.rand() < p_radical_low:
+                        # 激进化
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * (1 - o_i)
+                        elif o_i < 0:
+                            o_i = o_i - influence_factor * (1 + o_i)
+            else:  # m_i == 0
+                if identities[i] == identities[neighbor]:
+                    if np.random.rand() < p_conv_high:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                else:
+                    if np.random.rand() < p_conv_low:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+        # 限制 opinion 在 [-1, 1]
+        if o_i > 1:
+            o_i = 1
+        elif o_i < -1:
+            o_i = -1
+        opinions[i] = o_i
     return opinions
+

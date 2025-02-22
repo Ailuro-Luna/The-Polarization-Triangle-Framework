@@ -95,8 +95,7 @@ class SimulationApp:
             self.cbar_ax.set_visible(False)
             patches = [
                 Patch(color='#1a9850', label='Morality: 1'),
-                Patch(color='#ffff33', label='Morality: 0'),
-                Patch(color='#d73027', label='Morality: -1')
+                Patch(color='#d73027', label='Morality: 0')
             ]
             self.ax.legend(handles=patches, loc='upper right', title="Morality")
 
@@ -106,7 +105,7 @@ class SimulationApp:
         elif self.display_mode == "identity":
             return ['#e41a1c' if iden == 1 else '#377eb8' for iden in self.sim.identities]
         elif self.display_mode == "morality":
-            return ['#1a9850' if m == 1 else '#d73027' if m == -1 else '#ffff33' for m in self.sim.morals]
+            return ['#1a9850' if m == 1 else '#d73027' for m in self.sim.morals]
         else:
             return [self.cmap(self.norm(op)) for op in self.sim.opinions]
 
