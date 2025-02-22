@@ -60,20 +60,42 @@ class SimulationApp:
             pos=self.sim.pos,
             node_color=node_colors,
             with_labels=False,
-            node_size=20,  # 减小节点大小
-            alpha=0.8,  # 增加透明度
+            node_size=20,
+            alpha=0.8,
             edge_color="#AAAAAA",
             ax=self.ax
         )
         self.ax.set_title(f"Step {self.current_step}  Display: {self.display_mode}")
         self.ax.set_aspect('equal', 'box')
 
-        # 清空并更新颜色条/图例
-        if self.cb is not None:
-            self.cb.ax.clear()
-            self.cb = None
-        self.ax.legend_ = None  # 清除旧图例
-        self.update_color_legend()
+        if self.display_mode == "opinion":
+            # 如果已有 colorbar，则更新；否则创建新的
+            if self.cb is None:
+                sm = cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
+                sm.set_array([])
+                self.cb = self.fig.colorbar(sm, cax=self.cbar_ax)
+            else:
+                # 更新现有 colorbar 的映射（可选）
+                self.cb.update_normal(cm.ScalarMappable(norm=self.norm, cmap=self.cmap))
+        else:
+            # 切换到其他模式时移除 colorbar
+            if self.cb is not None:
+                self.cb.remove()
+                self.cb = None
+            if self.display_mode == "identity":
+                patches = [
+                    Patch(color='#e41a1c', label='Identity: 1'),
+                    Patch(color='#377eb8', label='Identity: -1')
+                ]
+                self.ax.legend(handles=patches, loc='upper right', title="Identity")
+            elif self.display_mode == "morality":
+                patches = [
+                    Patch(color='#1a9850', label='Morality: 1'),
+                    Patch(color='#d73027', label='Morality: 0')
+                ]
+                self.ax.legend(handles=patches, loc='upper right', title="Morality")
+            self.cbar_ax.clear()
+            self.cbar_ax.set_visible(False)
 
         self.fig.canvas.draw_idle()
 
