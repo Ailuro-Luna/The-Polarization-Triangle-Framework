@@ -89,16 +89,40 @@ def draw_morality_network(sim, title, filename):
     plt.savefig(filename)
     plt.close()
 
+# 新增：记录 opinion 历史轨迹的函数
+def run_simulation_with_trajectory(sim, steps=500):
+    history = []
+    # 记录初始状态
+    history.append(sim.opinions.copy())
+    for _ in range(steps):
+        sim.step()
+        history.append(sim.opinions.copy())
+    return history
 
-# 运行仿真，更新 opinion 状态（默认 500 步，可根据需要调整）
+# 新增：绘制 opinion 随时间变化的轨迹图
+def draw_opinion_trajectory(history, title, filename):
+    history = np.array(history)  # shape: (steps+1, num_agents)
+    steps = history.shape[0]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(steps)
+    # 为每个 agent 绘制一条轨迹
+    for i in range(history.shape[1]):
+        ax.plot(x, history[:, i], color='gray', alpha=0.5)
+    ax.set_title(title)
+    ax.set_xlabel("Time step")
+    ax.set_ylabel("Opinion value")
+    ax.set_ylim(-1, 1)
+    plt.savefig(filename)
+    plt.close()
+
+
+# 运行仿真，原函数保持不变，但下面将使用新的记录函数替换调用
 def run_simulation(sim, steps=500):
     for _ in range(steps):
         sim.step()
 
-
-# 根据 morality_ratio 参数覆盖仿真对象中 morals 的初始值
+# 根据 morality_ratio 参数覆盖仿真对象中 morals 的初始值（保持不变）
 def override_morality(sim, ratio):
-    # ratio 取值："all1" 表示全部为 1；"half" 表示一半为 1 一半为 0；"all0" 表示全部为 0
     n = sim.num_agents
     if ratio == "all1":
         sim.morals[:] = 1
@@ -111,37 +135,16 @@ def override_morality(sim, ratio):
     else:
         raise ValueError("未知的 morality ratio 参数")
 
-
 def batch_test():
-    # 结果保存的基础目录
     base_dir = "batch_results"
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
 
-    # 遍历身份（Identity）、道德（Morality）、意见（Opinion）初始化的两种模式，共 2*2*2 = 8 种组合
     for id_mode in ["random", "clustered"]:
         for mor_mode in ["random", "clustered"]:
             for op_mode in ["random", "clustered"]:
-                # 遍历意见分布类型：均匀(uniform)、单峰(single_peak)、双峰(twin_peak)
                 for op_dist in ["uniform", "single_peak", "twin_peak"]:
-                    # 遍历道德比例：全部为 1 (all1)、一半为 1 一半为 0 (half)、全部为 0 (all0)
                     for mor_ratio in ["all1", "half", "all0"]:
-                        # 构造文件夹名称，含义如下：
-                        # 文件夹名称格式:
-                        #   ID_{id_mode}_M_{mor_mode}_OP_{op_mode}_op_{op_dist}_mor_{mor_ratio}
-                        # 其中：
-                        #   - ID_random：身份随机初始化（每个 agent 以 0.5 概率取 1 或 -1）
-                        #   - ID_clustered：基于社区聚类的身份初始化
-                        #   - M_random：道德随机初始化
-                        #   - M_clustered：基于社区聚类的道德初始化
-                        #   - OP_random：意见随机初始化
-                        #   - OP_clustered：基于社区聚类的意见初始化
-                        #   - op_uniform：意见分布为均匀分布
-                        #   - op_single_peak：意见分布为单峰分布
-                        #   - op_twin_peak：意见分布为双峰分布
-                        #   - mor_all1：道德全部为 1
-                        #   - mor_half：道德一半为 1，一半为 0
-                        #   - mor_all0：道德全部为 0
                         folder_name = f"ID_{id_mode}_M_{mor_mode}_OP_{op_mode}_op_{op_dist}_mor_{mor_ratio}"
                         folder_path = os.path.join(base_dir, folder_name)
                         if not os.path.exists(folder_path):
@@ -149,30 +152,26 @@ def batch_test():
 
                         print("Processing configuration:", folder_name)
 
-                        # 基于 model_params_lfr（LFR benchmark 配置）构造参数字典，并覆盖指定参数
                         params = copy.deepcopy(model_params_lfr)
-                        params["num_agents"] = 500  # 保持 500 个 agent 的配置
-                        # 设置身份初始化方式：cluster_identity True 表示基于社区聚类
+                        params["num_agents"] = 500
                         params["cluster_identity"] = (id_mode == "clustered")
-                        # 设置道德初始化方式：cluster_morality True 表示基于社区聚类
                         params["cluster_morality"] = (mor_mode == "clustered")
-                        # 设置意见初始化方式：cluster_opinion True 表示基于社区聚类
                         params["cluster_opinion"] = (op_mode == "clustered")
-                        # 设置意见分布类型
                         params["opinion_distribution"] = op_dist
 
-                        # 初始化仿真对象
                         sim = Simulation(**params)
-                        # 根据当前配置覆盖初始道德值
                         override_morality(sim, mor_ratio)
 
                         # 保存初始状态下的 opinion 网络图
                         start_opinion_path = os.path.join(folder_path, "start_opinion.png")
-                        draw_opinion_network(sim, f"Starting Opinion Network\nConfig: {folder_name}",
-                                             start_opinion_path)
+                        draw_opinion_network(sim, f"Starting Opinion Network\nConfig: {folder_name}", start_opinion_path)
 
-                        # 运行仿真（例如 500 步，可根据需要调整步数）
-                        run_simulation(sim, steps=500)
+                        # 运行仿真并记录 opinion 历史轨迹
+                        trajectory = run_simulation_with_trajectory(sim, steps=500)
+
+                        # 保存 opinion 随时间变化的轨迹图
+                        trajectory_path = os.path.join(folder_path, "opinion_trajectory.png")
+                        draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}", trajectory_path)
 
                         # 保存结束状态下的 opinion 网络图
                         end_opinion_path = os.path.join(folder_path, "end_opinion.png")
@@ -185,7 +184,6 @@ def batch_test():
                         # 保存结束状态下的 morality 网络图
                         end_morality_path = os.path.join(folder_path, "end_morality.png")
                         draw_morality_network(sim, f"Ending Morality Network\nConfig: {folder_name}", end_morality_path)
-
 
 if __name__ == "__main__":
     batch_test()
