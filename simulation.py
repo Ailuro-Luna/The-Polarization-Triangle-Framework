@@ -27,14 +27,15 @@ class Simulation:
                  coupling="none",
                  extreme_fraction=0.0,
                  moral_correlation="partial",
-                 # 新增 cluster 参数（仅在 community 或 LFR 网络下生效）
                  cluster_identity=False,
                  cluster_morality=False,
                  cluster_identity_prob=0.8,
                  cluster_morality_prob=0.8,
-                 # 新增 morality 初始化模式参数：
-                 morality_mode="evenly_non_neutral",  # 可选："all_neutral", "evenly_non_neutral", "leaning_conservative", "leaning_progressive", "half_neutral_mixed"
-                 morality_leaning_prob=0.7):
+                 morality_mode="evenly_non_neutral",
+                 morality_leaning_prob=0.7,
+                 cluster_opinion=False,
+                 cluster_opinion_prob=0.8):
+
         self.num_agents = num_agents
         self.network_type = network_type
 
@@ -90,6 +91,12 @@ class Simulation:
         # 针对 community 和 LFR 网络，提前进行 cluster 初始化
         self.cluster_identity_majority = {}
         self.cluster_morality_majority = {}
+
+        self.cluster_opinion = cluster_opinion
+        self.cluster_opinion_prob = cluster_opinion_prob
+        if network_type in ['community', 'lfr'] and cluster_opinion:
+            self.cluster_opinion_majority = {}
+
         if network_type in ['community', 'lfr']:
             for node in self.G.nodes():
                 # 对于 LFR，社区属性存储在 "community" 键中；可能为集合，选择一个代表元素
@@ -151,9 +158,36 @@ class Simulation:
                 morality = sample_morality(morality_mode, morality_leaning_prob)
             self.morals[i] = morality
 
-            # 生成 opinion（初始化 opinion 与 morality cluster 无关，保持原方案）
-            self.opinions[i] = self.generate_opinion(identity, distribution=opinion_distribution,
-                                                     coupling=coupling, extreme_fraction=extreme_fraction)
+            # 初始化 opinion
+            if self.cluster_opinion and self.network_type in ['community', 'lfr']:
+                if self.network_type == 'community':
+                    block = self.G.nodes[i].get("block")
+                elif self.network_type == 'lfr':
+                    block = self.G.nodes[i].get("community")
+                    if isinstance(block, (set, frozenset)):
+                        block = min(block)
+                if block not in self.cluster_opinion_majority:
+                    # 根据 opinion_distribution 选择生成 majority opinion 的方法
+                    if opinion_distribution == "twin_peak":
+                        majority_opinion = np.random.choice([-1, 1]) * np.abs(np.random.normal(0.7, 0.2))
+                    elif opinion_distribution == "uniform":
+                        majority_opinion = np.random.uniform(-1, 1)
+                    elif opinion_distribution == "single_peak":
+                        majority_opinion = np.random.normal(0, 0.3)
+                    elif opinion_distribution == "skewed":
+                        majority_opinion = np.random.beta(2, 5) * 2 - 1
+                    else:
+                        majority_opinion = np.random.uniform(-1, 1)
+                    self.cluster_opinion_majority[block] = majority_opinion
+                majority = self.cluster_opinion_majority.get(block)
+                if np.random.rand() < self.cluster_opinion_prob:
+                    self.opinions[i] = majority
+                else:
+                    self.opinions[i] = self.generate_opinion(identity, distribution=opinion_distribution,
+                                                             coupling=coupling, extreme_fraction=extreme_fraction)
+            else:
+                self.opinions[i] = self.generate_opinion(identity, distribution=opinion_distribution,
+                                                         coupling=coupling, extreme_fraction=extreme_fraction)
 
         # 参数设置： opinion 更新动力学
         self.tolerance = 0.6

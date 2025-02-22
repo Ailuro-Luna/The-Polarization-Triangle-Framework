@@ -107,7 +107,9 @@ model_params_lfr = {
     "moral_correlation": "partial",
     "cluster_identity": True,
     "cluster_morality": True,
-    "morality_mode": "half_neutral_mixed"
+    "morality_mode": "half_neutral_mixed",
+    "cluster_opinion": True,
+    "cluster_opinion_prob": 0.8
 }
 
 
