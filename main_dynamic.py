@@ -10,6 +10,9 @@ from matplotlib.patches import Patch
 from simulation import Simulation
 from config import model_params
 import threading
+from trajectory_utils import run_simulation_with_trajectory, draw_opinion_trajectory
+import sys
+sys.setrecursionlimit(1500)
 
 class SimulationApp:
     def __init__(self, sim_params, num_steps=500):
@@ -25,6 +28,8 @@ class SimulationApp:
         self.cmap = cm.coolwarm
         self.norm = colors.TwoSlopeNorm(vmin=-1, vcenter=0, vmax=1)
         self.cb = None  # 保存颜色条对象
+
+        self.opinion_history = []
 
         # 创建图形界面
         self.setup_plot()
@@ -60,42 +65,20 @@ class SimulationApp:
             pos=self.sim.pos,
             node_color=node_colors,
             with_labels=False,
-            node_size=20,
-            alpha=0.8,
+            node_size=20,  # 减小节点大小
+            alpha=0.8,  # 增加透明度
             edge_color="#AAAAAA",
             ax=self.ax
         )
         self.ax.set_title(f"Step {self.current_step}  Display: {self.display_mode}")
         self.ax.set_aspect('equal', 'box')
 
-        if self.display_mode == "opinion":
-            # 如果已有 colorbar，则更新；否则创建新的
-            if self.cb is None:
-                sm = cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
-                sm.set_array([])
-                self.cb = self.fig.colorbar(sm, cax=self.cbar_ax)
-            else:
-                # 更新现有 colorbar 的映射（可选）
-                self.cb.update_normal(cm.ScalarMappable(norm=self.norm, cmap=self.cmap))
-        else:
-            # 切换到其他模式时移除 colorbar
-            if self.cb is not None:
-                self.cb.remove()
-                self.cb = None
-            if self.display_mode == "identity":
-                patches = [
-                    Patch(color='#e41a1c', label='Identity: 1'),
-                    Patch(color='#377eb8', label='Identity: -1')
-                ]
-                self.ax.legend(handles=patches, loc='upper right', title="Identity")
-            elif self.display_mode == "morality":
-                patches = [
-                    Patch(color='#1a9850', label='Morality: 1'),
-                    Patch(color='#d73027', label='Morality: 0')
-                ]
-                self.ax.legend(handles=patches, loc='upper right', title="Morality")
-            self.cbar_ax.clear()
-            self.cbar_ax.set_visible(False)
+        # 清空并更新颜色条/图例
+        if self.cb is not None:
+            self.cb.ax.clear()
+            self.cb = None
+        self.ax.legend_ = None  # 清除旧图例
+        self.update_color_legend()
 
         self.fig.canvas.draw_idle()
 
@@ -142,12 +125,26 @@ class SimulationApp:
         self.update_plot()
 
     def run_simulation(self):
+        # 初始化轨迹记录
+        self.opinion_history = []
+        # 如果需要记录初始状态，也可先记录一份：
+        self.opinion_history.append(self.sim.opinions.copy())
+
         while self.running and self.current_step < self.num_steps:
             self.sim.step()
             self.current_step += 1
+            # 记录每步的 opinion 状态
+            self.opinion_history.append(self.sim.opinions.copy())
             self.update_plot()
             self.fig.canvas.flush_events()
-            # time.sleep(0.2)  # 可根据需要控制更新速度
+            # 可根据需要调整休眠时间，例如：time.sleep(0.2)
+
+        # 仿真结束后，调用共用函数生成轨迹图
+        trajectory_filename = "opinion_trajectory.png"
+        draw_opinion_trajectory(self.opinion_history,
+                                f"Opinion Trajectories (Steps 0-{self.current_step})",
+                                trajectory_filename)
+        print("Trajectory saved to", trajectory_filename)
 
     def start_simulation(self):
         if not self.running:

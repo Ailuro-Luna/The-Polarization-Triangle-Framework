@@ -7,6 +7,9 @@ import matplotlib.colors as colors
 import networkx as nx
 from simulation import Simulation
 from config import model_params_lfr
+# batch_test.py 顶部增加导入
+from trajectory_utils import run_simulation_with_trajectory, draw_opinion_trajectory
+
 
 
 # 帮助函数：绘制并保存 opinion 网络图（包含 color bar）
@@ -89,33 +92,6 @@ def draw_morality_network(sim, title, filename):
     plt.savefig(filename)
     plt.close()
 
-# 新增：记录 opinion 历史轨迹的函数
-def run_simulation_with_trajectory(sim, steps=500):
-    history = []
-    # 记录初始状态
-    history.append(sim.opinions.copy())
-    for _ in range(steps):
-        sim.step()
-        history.append(sim.opinions.copy())
-    return history
-
-# 新增：绘制 opinion 随时间变化的轨迹图
-def draw_opinion_trajectory(history, title, filename):
-    history = np.array(history)  # shape: (steps+1, num_agents)
-    steps = history.shape[0]
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = np.arange(steps)
-    # 为每个 agent 绘制一条轨迹
-    for i in range(history.shape[1]):
-        ax.plot(x, history[:, i], color='gray', alpha=0.5)
-    ax.set_title(title)
-    ax.set_xlabel("Time step")
-    ax.set_ylabel("Opinion value")
-    ax.set_ylim(-1, 1)
-    plt.savefig(filename)
-    plt.close()
-
-
 # 运行仿真，原函数保持不变，但下面将使用新的记录函数替换调用
 def run_simulation(sim, steps=500):
     for _ in range(steps):
@@ -171,7 +147,8 @@ def batch_test():
 
                         # 保存 opinion 随时间变化的轨迹图
                         trajectory_path = os.path.join(folder_path, "opinion_trajectory.png")
-                        draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}", trajectory_path)
+                        draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}",
+                                                trajectory_path)
 
                         # 保存结束状态下的 opinion 网络图
                         end_opinion_path = os.path.join(folder_path, "end_opinion.png")
