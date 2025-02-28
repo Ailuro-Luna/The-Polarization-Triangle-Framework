@@ -4,20 +4,16 @@ import networkx as nx
 from numba import njit
 from config import SimulationConfig
 
-def sample_morality(mode, leaning_prob=0.7):
-    r = np.random.rand()
-    if mode == "all_neutral":
+def sample_morality(mode):
+    if mode == "all1":
+        return 1
+    elif mode == "all0":
         return 0
-    elif mode == "evenly_non_neutral":
-        return 1 if r < 0.5 else 0
-    elif mode == "leaning_conservative":
-        return 0 if r < leaning_prob else 1
-    elif mode == "leaning_progressive":
-        return 1 if r < leaning_prob else 0
-    elif mode == "half_neutral_mixed":
-        return 1 if r < 0.5 else 0
+    elif mode == "half":
+        return 1 if np.random.rand() < 0.5 else 0
     else:
-        return 1 if r < 0.5 else 0
+        # 默认情况也采用 half 模式
+        return 1 if np.random.rand() < 0.5 else 0
 
 class Simulation:
     def __init__(self, config: SimulationConfig):
@@ -48,7 +44,7 @@ class Simulation:
                 if config.cluster_identity and block not in self.cluster_identity_majority:
                     self.cluster_identity_majority[block] = 1 if np.random.rand() < 0.5 else -1
                 if config.cluster_morality and block not in self.cluster_morality_majority:
-                    self.cluster_morality_majority[block] = sample_morality(config.opinion_distribution, leaning_prob=0.7)
+                    self.cluster_morality_majority[block] = sample_morality(config.morality_mode)
                 if config.cluster_opinion:
                     if block not in self.cluster_opinion_majority:
                         if config.opinion_distribution == "twin_peak":
@@ -133,11 +129,11 @@ class Simulation:
                     block = self.G.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
-                majority = self.cluster_morality_majority.get(block, sample_morality(self.config.opinion_distribution, leaning_prob=0.7))
+                majority = self.cluster_morality_majority.get(block, sample_morality(self.config.morality_mode))
                 prob = self.config.cluster_morality_prob
-                self.morals[i] = majority if np.random.rand() < prob else sample_morality(self.config.opinion_distribution, leaning_prob=0.7)
+                self.morals[i] = majority if np.random.rand() < prob else sample_morality(self.config.morality_mode)
             else:
-                self.morals[i] = sample_morality(self.config.opinion_distribution, leaning_prob=0.7)
+                self.morals[i] = sample_morality(self.config.morality_mode)
 
     def _init_opinions(self):
         for i in range(self.num_agents):

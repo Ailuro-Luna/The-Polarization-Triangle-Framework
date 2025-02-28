@@ -40,7 +40,7 @@ def batch_test():
                         params.cluster_opinion = (op_mode == "clustered")
                         params.opinion_distribution = op_dist
                         sim = Simulation(params)
-                        override_morality(sim, mor_ratio)
+                        # override_morality(sim, mor_ratio)
                         start_opinion_path = os.path.join(folder_path, "start_opinion.png")
                         draw_network(sim, "opinion", f"Starting Opinion Network\nConfig: {folder_name}", start_opinion_path)
                         trajectory = run_simulation_with_trajectory(sim, steps=500)

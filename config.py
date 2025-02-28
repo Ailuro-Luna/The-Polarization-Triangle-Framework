@@ -17,6 +17,7 @@ class SimulationConfig:
     coupling: str = "partial"  # 可选："none"、"partial"、"strong"
     extreme_fraction: float = 0.1
     moral_correlation: str = "partial"  # 可选："none"、"partial"、"strong"
+    morality_mode: str = "half"  # 只允许 "all1"、"all0"、"half"
     # 聚类参数
     cluster_identity: bool = False
     cluster_morality: bool = False
