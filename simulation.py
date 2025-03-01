@@ -193,8 +193,10 @@ class Simulation:
             self.morals
         )
 
+
 @njit
-def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_radical_low, p_conv_high, p_conv_low, identities, morals):
+def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_radical_low, p_conv_high, p_conv_low,
+                    identities, morals):
     n = opinions.shape[0]
     for i in range(n):
         count = 0
@@ -210,28 +212,46 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
         o_j = opinions[neighbor]
         m_i = morals[i]
         same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
+
         if same_dir:
-            if m_i == 1:
-                if np.random.rand() < p_radical_high:
-                    o_i = o_i + influence_factor * (1 - o_i) if o_i > 0 else o_i - influence_factor * (1 + o_i)
-            else:
+            # 规则1和2：意见同向，moral=0，均以较低概率收敛（使用 p_conv_low）
+            if m_i == 0:
+                if np.random.rand() < p_conv_low:
+                    o_i = o_i + influence_factor * (o_j - o_i)
+            # 规则3和4：意见同向，moral=1，均以较低概率使意见走向更极化（使用 p_radical_low）
+            else:  # m_i == 1
                 if np.random.rand() < p_radical_low:
-                    o_i = o_i + influence_factor * (1 - o_i) if o_i > 0 else o_i - influence_factor * (1 + o_i)
+                    # 修改：添加"极化阻力因子"，使接近极端值更困难
+                    resistance = 1 - (abs(o_i) ** 2)  # 二次函数，在极端值处阻力最大
+                    if o_i > 0:
+                        o_i = o_i + influence_factor * (1 - o_i) * resistance
+                    else:
+                        o_i = o_i - influence_factor * (1 + o_i) * resistance
         else:
-            if m_i == 1:
-                if identities[i] == identities[neighbor]:
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                else:
-                    if np.random.rand() < p_radical_low:
-                        o_i = o_i + influence_factor * (1 - o_i) if o_i > 0 else o_i - influence_factor * (1 + o_i)
-            else:
+            # 意见不同方向
+            if m_i == 0:
+                # 规则5：不同方向，moral=0，身份相同，收敛概率较高（p_conv_high）
                 if identities[i] == identities[neighbor]:
                     if np.random.rand() < p_conv_high:
                         o_i = o_i + influence_factor * (o_j - o_i)
+                # 规则6：不同方向，moral=0，身份不同，收敛概率较低（p_conv_low）
                 else:
                     if np.random.rand() < p_conv_low:
                         o_i = o_i + influence_factor * (o_j - o_i)
+            else:  # m_i == 1
+                # 规则7：不同方向，moral=1，身份相同，收敛概率较低（p_conv_low）
+                if identities[i] == identities[neighbor]:
+                    if np.random.rand() < p_conv_low:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                # 规则8：不同方向，moral=1，身份不同，意见以较高概率极化（p_radical_high）
+                else:
+                    if np.random.rand() < p_radical_high:
+                        # 修改：添加"极化阻力因子"，使接近极端值更困难
+                        resistance = 1 - (abs(o_i) ** 2)  # 二次函数，在极端值处阻力最大
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * (1 + o_i) * resistance
         if o_i > 1:
             o_i = 1
         elif o_i < -1:

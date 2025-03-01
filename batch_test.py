@@ -6,6 +6,7 @@ from simulation import Simulation
 from config import lfr_config
 from visualization import draw_network
 from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory
+from visualization import draw_network, draw_opinion_distribution
 
 def override_morality(sim, ratio):
     n = sim.num_agents
@@ -19,6 +20,7 @@ def override_morality(sim, ratio):
         sim.morals[:] = arr
     else:
         raise ValueError("Unknown morality ratio")
+
 
 def batch_test():
     base_dir = "batch_results"
@@ -39,19 +41,30 @@ def batch_test():
                         params.cluster_morality = (mor_mode == "clustered")
                         params.cluster_opinion = (op_mode == "clustered")
                         params.opinion_distribution = op_dist
+                        params.morality_mode = mor_ratio
                         sim = Simulation(params)
                         # override_morality(sim, mor_ratio)
                         start_opinion_path = os.path.join(folder_path, "start_opinion.png")
-                        draw_network(sim, "opinion", f"Starting Opinion Network\nConfig: {folder_name}", start_opinion_path)
+                        draw_network(sim, "opinion", f"Starting Opinion Network\nConfig: {folder_name}",
+                                     start_opinion_path)
                         trajectory = run_simulation_with_trajectory(sim, steps=500)
                         trajectory_path = os.path.join(folder_path, "opinion_trajectory.png")
-                        draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}", trajectory_path)
+                        draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}",
+                                                trajectory_path)
                         end_opinion_path = os.path.join(folder_path, "end_opinion.png")
                         draw_network(sim, "opinion", f"Ending Opinion Network\nConfig: {folder_name}", end_opinion_path)
                         end_identity_path = os.path.join(folder_path, "end_identity.png")
-                        draw_network(sim, "identity", f"Ending Identity Network\nConfig: {folder_name}", end_identity_path)
+                        draw_network(sim, "identity", f"Ending Identity Network\nConfig: {folder_name}",
+                                     end_identity_path)
                         end_morality_path = os.path.join(folder_path, "end_morality.png")
-                        draw_network(sim, "morality", f"Ending Morality Network\nConfig: {folder_name}", end_morality_path)
+                        draw_network(sim, "morality", f"Ending Morality Network\nConfig: {folder_name}",
+                                     end_morality_path)
+
+                        # 新增：绘制 opinion 分布图
+                        end_distribution_path = os.path.join(folder_path, "opinion_distribution.png")
+                        draw_opinion_distribution(sim, f"Ending Opinion Distribution\nConfig: {folder_name}",
+                                                  end_distribution_path)
+
 
 if __name__ == "__main__":
     batch_test()

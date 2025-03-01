@@ -12,6 +12,8 @@ import sys
 from simulation import Simulation
 from config import config
 from trajectory import draw_opinion_trajectory
+from visualization import draw_network, draw_opinion_distribution
+
 
 sys.setrecursionlimit(1500)
 
@@ -125,6 +127,13 @@ class SimulationApp:
                                 f"Opinion Trajectories (Steps 0-{self.current_step})",
                                 trajectory_filename)
         print("Trajectory saved to", trajectory_filename)
+
+        # 绘制opinion分布图
+        distribution_filename = "opinion_distribution.png"
+        draw_opinion_distribution(self.sim,
+                                  f"Opinion Distribution at Step {self.current_step}",
+                                  distribution_filename)
+        print("Distribution saved to", distribution_filename)
 
     def start_simulation(self):
         if not self.running:

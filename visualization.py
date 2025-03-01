@@ -46,3 +46,17 @@ def draw_network(sim, mode, title, filename):
         ax.legend(handles=patches, loc='upper right', title="Morality")
     plt.savefig(filename)
     plt.close()
+
+def draw_opinion_distribution(sim, title, filename, bins=20):
+    """
+    绘制结束时 agent 的 opinion 分布图。
+    横轴为 opinion 区间（默认在 -1 到 1 之间），纵轴为落在该区间内的 agent 数量。
+    """
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(8, 6))
+    plt.hist(sim.opinions, bins=bins, range=(-1, 1), color='blue', alpha=0.7, edgecolor='black')
+    plt.title(title)
+    plt.xlabel("Opinion")
+    plt.ylabel("Number of Agents")
+    plt.savefig(filename)
+    plt.close()
