@@ -6,7 +6,7 @@ from simulation import Simulation
 from config import lfr_config
 from visualization import draw_network
 from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory
-from visualization import draw_network, draw_opinion_distribution
+from visualization import draw_network, draw_opinion_distribution, draw_opinion_distribution_heatmap
 
 def override_morality(sim, ratio):
     n = sim.num_agents
@@ -41,26 +41,50 @@ def batch_test():
                         params.cluster_morality = (mor_mode == "clustered")
                         params.cluster_opinion = (op_mode == "clustered")
                         params.opinion_distribution = op_dist
+                        # 修复：添加这行设置morality_mode
                         params.morality_mode = mor_ratio
+
                         sim = Simulation(params)
-                        # override_morality(sim, mor_ratio)
+
+                        # 打印验证morality模式是否正确应用
+                        moral_mean = np.mean(sim.morals)
+                        print(f"Morality mode: {mor_ratio}, Mean moral value: {moral_mean}")
+
                         start_opinion_path = os.path.join(folder_path, "start_opinion.png")
                         draw_network(sim, "opinion", f"Starting Opinion Network\nConfig: {folder_name}",
                                      start_opinion_path)
+
+                        # 运行模拟并记录完整轨迹
                         trajectory = run_simulation_with_trajectory(sim, steps=500)
+
+                        # 绘制轨迹图
                         trajectory_path = os.path.join(folder_path, "opinion_trajectory.png")
                         draw_opinion_trajectory(trajectory, f"Opinion Trajectories\nConfig: {folder_name}",
                                                 trajectory_path)
+
+                        # 添加：绘制opinion分布热力图
+                        heatmap_path = os.path.join(folder_path, "opinion_heatmap.png")
+                        draw_opinion_distribution_heatmap(
+                            trajectory,
+                            f"Opinion Distribution over Time\nConfig: {folder_name}",
+                            heatmap_path,
+                            bins=40,
+                            log_scale=True
+                        )
+
+                        # 其他可视化继续保持不变
                         end_opinion_path = os.path.join(folder_path, "end_opinion.png")
                         draw_network(sim, "opinion", f"Ending Opinion Network\nConfig: {folder_name}", end_opinion_path)
+
                         end_identity_path = os.path.join(folder_path, "end_identity.png")
                         draw_network(sim, "identity", f"Ending Identity Network\nConfig: {folder_name}",
                                      end_identity_path)
+
                         end_morality_path = os.path.join(folder_path, "end_morality.png")
                         draw_network(sim, "morality", f"Ending Morality Network\nConfig: {folder_name}",
                                      end_morality_path)
 
-                        # 新增：绘制 opinion 分布图
+                        # 绘制 opinion 分布图
                         end_distribution_path = os.path.join(folder_path, "opinion_distribution.png")
                         draw_opinion_distribution(sim, f"Ending Opinion Distribution\nConfig: {folder_name}",
                                                   end_distribution_path)
