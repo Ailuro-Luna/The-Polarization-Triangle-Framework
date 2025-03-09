@@ -4,16 +4,18 @@ import networkx as nx
 from numba import njit
 from config import SimulationConfig
 
-def sample_morality(mode):
-    if mode == "all1":
-        return 1
-    elif mode == "all0":
-        return 0
-    elif mode == "half":
-        return 1 if np.random.rand() < 0.5 else 0
-    else:
-        # 默认情况也采用 half 模式
-        return 1 if np.random.rand() < 0.5 else 0
+
+def sample_morality(morality_rate):
+    """
+    根据道德化率随机生成一个道德值（0或1）
+
+    参数:
+    morality_rate -- 介于0和1之间的浮点数，表示道德化的概率
+
+    返回:
+    1（道德化）或0（非道德化）
+    """
+    return 1 if np.random.rand() < morality_rate else 0
 
 class Simulation:
     def __init__(self, config: SimulationConfig):
@@ -24,6 +26,13 @@ class Simulation:
         # 根据网络类型生成网络
         self.G = self._create_network()
         self.G.remove_edges_from(nx.selfloop_edges(self.G))
+
+        # 检查是否有孤立点
+        isolated_count = len([node for node, degree in dict(self.G.degree()).items() if degree == 0])
+        if isolated_count > 0:
+            print(f"警告: 移除自环后仍有 {isolated_count} 个孤立点，再次处理...")
+            self._handle_isolated_nodes(self.G)
+
         self.pos = nx.spring_layout(self.G, k=0.1, iterations=50, scale=2.0, seed=42)
         self.adj_matrix = nx.to_numpy_array(self.G, dtype=np.int32)
 
@@ -31,6 +40,10 @@ class Simulation:
         self.cluster_identity_majority = {}
         self.cluster_morality_majority = {}
         self.cluster_opinion_majority = {} if config.cluster_opinion else None
+
+        # 初始化身份与议题关联映射
+        self.identity_issue_mapping = config.identity_issue_mapping
+        self.identity_influence_factor = config.identity_influence_factor
 
         if self.network_type in ['community', 'lfr']:
             for node in self.G.nodes():
@@ -44,7 +57,7 @@ class Simulation:
                 if config.cluster_identity and block not in self.cluster_identity_majority:
                     self.cluster_identity_majority[block] = 1 if np.random.rand() < 0.5 else -1
                 if config.cluster_morality and block not in self.cluster_morality_majority:
-                    self.cluster_morality_majority[block] = sample_morality(config.morality_mode)
+                    self.cluster_morality_majority[block] = sample_morality(config.morality_rate)
                 if config.cluster_opinion:
                     if block not in self.cluster_opinion_majority:
                         if config.opinion_distribution == "twin_peak":
@@ -103,6 +116,42 @@ class Simulation:
         else:
             return nx.erdos_renyi_graph(n=self.num_agents, p=0.1)
 
+    def _handle_isolated_nodes(self, G):
+        """处理网络中的孤立点
+
+        参数:
+        G -- 网络图
+
+        处理方式:
+        1. 找出所有孤立点（度为0的节点）
+        2. 为每个孤立点随机连接到网络中的其他节点
+        """
+        isolated_nodes = [node for node, degree in dict(G.degree()).items() if degree == 0]
+
+        if not isolated_nodes:
+            return  # 如果没有孤立点，直接返回
+
+        print(f"检测到 {len(isolated_nodes)} 个孤立点，进行处理...")
+
+        # 获取非孤立节点列表
+        non_isolated = [node for node in G.nodes() if node not in isolated_nodes]
+
+        if not non_isolated:
+            # 如果所有节点都是孤立的（极少情况），创建一个环形连接
+            for i in range(len(isolated_nodes)):
+                G.add_edge(isolated_nodes[i], isolated_nodes[(i + 1) % len(isolated_nodes)])
+            return
+
+        # 为每个孤立点随机连接到1-3个非孤立节点
+        for node in isolated_nodes:
+            # 随机决定连接数量，最小1个，最大3个或所有非孤立节点数
+            num_connections = min(np.random.randint(1, 4), len(non_isolated))
+            # 随机选择连接目标
+            targets = np.random.choice(non_isolated, num_connections, replace=False)
+            # 添加边
+            for target in targets:
+                G.add_edge(node, target)
+
     def _init_identities(self):
         for i in range(self.num_agents):
             if self.config.cluster_identity and self.network_type in ['community', 'lfr']:
@@ -129,11 +178,11 @@ class Simulation:
                     block = self.G.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
-                majority = self.cluster_morality_majority.get(block, sample_morality(self.config.morality_mode))
+                majority = self.cluster_morality_majority.get(block, sample_morality(self.config.morality_rate))
                 prob = self.config.cluster_morality_prob
-                self.morals[i] = majority if np.random.rand() < prob else sample_morality(self.config.morality_mode)
+                self.morals[i] = majority if np.random.rand() < prob else sample_morality(self.config.morality_rate)
             else:
-                self.morals[i] = sample_morality(self.config.morality_mode)
+                self.morals[i] = sample_morality(self.config.morality_rate)
 
     def _init_opinions(self):
         for i in range(self.num_agents):
@@ -163,6 +212,15 @@ class Simulation:
             else:
                 self.opinions[i] = self.generate_opinion(self.identities[i])
 
+        # 应用身份与议题关联的偏移
+        for i in range(self.num_agents):
+            identity = self.identities[i]
+            association = self.identity_issue_mapping.get(identity, 0)
+            # 基于身份与议题关联添加偏移
+            random_factor = np.random.uniform(0.5, 1.0)
+            shift = association * random_factor
+            self.opinions[i] = np.clip(self.opinions[i] + shift, -1, 1)
+
     def generate_opinion(self, identity):
         if self.config.extreme_fraction > 0 and np.random.rand() < self.config.extreme_fraction:
             if self.config.coupling != "none":
@@ -180,7 +238,64 @@ class Simulation:
         else:
             return np.random.uniform(-1, 1)
 
+    # 添加新方法：身份影响步骤
+    def identity_influence_step(self):
+        for i in range(self.num_agents):
+            agent_identity = self.identities[i]
+
+            # 第一部分：处理同身份邻居的影响
+            same_identity_neighbors = []
+            for j in range(self.num_agents):
+                if self.adj_matrix[i, j] == 1 and self.identities[j] == agent_identity:
+                    same_identity_neighbors.append(j)
+
+            if same_identity_neighbors:
+                # 计算同身份邻居的平均意见和道德值
+                avg_opinion = np.mean([self.opinions[j] for j in same_identity_neighbors])
+                avg_morality = np.mean([self.morals[j] for j in same_identity_neighbors])
+
+                # 使用感知到的道德值作为被影响的概率
+                if np.random.rand() < avg_morality:
+                    # 获取身份与议题关联
+                    association = self.identity_issue_mapping.get(agent_identity, 0)
+
+                    # 计算影响强度
+                    influence = self.identity_influence_factor * abs(association)
+                    resistance = 1 - (abs(self.opinions[i]) ** 2)
+
+                    # 应用向群体平均意见的影响
+                    self.opinions[i] = self.opinions[i] + influence * (avg_opinion - self.opinions[i])
+
+                    # 确保意见保持在界限内
+                    self.opinions[i] = np.clip(self.opinions[i], -1, 1)
+
+            # 第二部分：直接向身份关联立场的拉拢效应
+            # 以 identity_influence_factor 作为概率决定是否受到拉拢
+            if np.random.rand() < self.identity_influence_factor:
+                # 获取该身份关联的议题立场
+                target_position = self.identity_issue_mapping.get(agent_identity, 0)
+
+                # 计算拉拢效应强度（与当前立场差距的一小部分）
+                pull_strength = 0.05  # 可以调整这个值控制拉拢强度
+
+                # 应用拉拢效应，向目标位置移动
+                direction = np.sign(target_position - self.opinions[i])
+                if direction != 0:  # 只有当agent不在目标位置时才移动
+                    # 移动公式：当前位置 + 方向 * 拉拢强度 * (1 - 到达目标位置后的阻力)
+                    resistance = abs(self.opinions[i] - target_position) / 2  # 接近目标位置时阻力增加
+                    self.opinions[i] = self.opinions[i] + direction * pull_strength * resistance
+
+                    # 确保不会越过目标位置（防止"过冲"）
+                    if (direction > 0 and self.opinions[i] > target_position) or \
+                            (direction < 0 and self.opinions[i] < target_position):
+                        self.opinions[i] = target_position
+
+                    # 确保意见保持在界限内
+                    self.opinions[i] = np.clip(self.opinions[i], -1, 1)
+
+    # 修改step方法
     def step(self):
+        # 首先，应用原始意见更新
         self.opinions = update_opinions(
             self.opinions,
             self.adj_matrix,
@@ -192,6 +307,9 @@ class Simulation:
             self.identities,
             self.morals
         )
+
+        # 然后，应用身份影响
+        self.identity_influence_step()
 
 
 @njit
@@ -222,7 +340,7 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
             else:  # m_i == 1
                 if np.random.rand() < p_radical_low:
                     # 修改：添加"极化阻力因子"，使接近极端值更困难
-                    resistance = 1 - (abs(o_i) ** 2)  # 二次函数，在极端值处阻力最大
+                    resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
                     if o_i > 0:
                         o_i = o_i + influence_factor * (1 - o_i) * resistance
                     else:
@@ -247,7 +365,7 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
                 else:
                     if np.random.rand() < p_radical_high:
                         # 修改：添加"极化阻力因子"，使接近极端值更困难
-                        resistance = 1 - (abs(o_i) ** 2)  # 二次函数，在极端值处阻力最大
+                        resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
                         if o_i > 0:
                             o_i = o_i + influence_factor * (1 - o_i) * resistance
                         else:

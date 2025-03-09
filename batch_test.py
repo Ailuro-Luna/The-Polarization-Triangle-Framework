@@ -8,30 +8,35 @@ from visualization import draw_network
 from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory
 from visualization import draw_network, draw_opinion_distribution, draw_opinion_distribution_heatmap
 
-def override_morality(sim, ratio):
+
+def override_morality(sim, rate):
+    """
+    覆盖模拟中所有代理的道德值
+
+    参数:
+    sim -- 模拟实例
+    rate -- 道德化率（0到1之间的浮点数）
+    """
     n = sim.num_agents
-    if ratio == "all1":
-        sim.morals[:] = 1
-    elif ratio == "all0":
-        sim.morals[:] = 0
-    elif ratio == "half":
-        arr = np.array([1] * (n // 2) + [0] * (n - n // 2))
-        np.random.shuffle(arr)
-        sim.morals[:] = arr
-    else:
-        raise ValueError("Unknown morality ratio")
+    # 生成具有指定道德化率的随机道德值数组
+    morals = np.zeros(n, dtype=np.int32)
+    moral_indices = np.random.choice(n, int(n * rate), replace=False)
+    morals[moral_indices] = 1
+    sim.morals[:] = morals
 
 
 def batch_test():
     base_dir = "batch_results"
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
+
     for id_mode in ["random", "clustered"]:
+    # for id_mode in ["clustered"]:
         for mor_mode in ["random", "clustered"]:
             for op_mode in ["random", "clustered"]:
                 for op_dist in ["uniform", "single_peak", "twin_peak"]:
-                    for mor_ratio in ["all1", "half", "all0"]:
-                        folder_name = f"ID_{id_mode}_M_{mor_mode}_OP_{op_mode}_op_{op_dist}_mor_{mor_ratio}"
+                    for mor_rate in [0.25, 0.5, 0.75]:  # 使用三个不同的道德化率
+                        folder_name = f"ID_{id_mode}_M_{mor_mode}_OP_{op_mode}_op_{op_dist}_mor_{mor_rate:.1f}"
                         folder_path = os.path.join(base_dir, folder_name)
                         if not os.path.exists(folder_path):
                             os.makedirs(folder_path)
@@ -41,14 +46,14 @@ def batch_test():
                         params.cluster_morality = (mor_mode == "clustered")
                         params.cluster_opinion = (op_mode == "clustered")
                         params.opinion_distribution = op_dist
-                        # 修复：添加这行设置morality_mode
-                        params.morality_mode = mor_ratio
+                        # 设置道德化率
+                        params.morality_rate = mor_rate
 
                         sim = Simulation(params)
 
                         # 打印验证morality模式是否正确应用
                         moral_mean = np.mean(sim.morals)
-                        print(f"Morality mode: {mor_ratio}, Mean moral value: {moral_mean}")
+                        print(f"Morality rate: {mor_rate}, Mean moral value: {moral_mean}")
 
                         start_opinion_path = os.path.join(folder_path, "start_opinion.png")
                         draw_network(sim, "opinion", f"Starting Opinion Network\nConfig: {folder_name}",
