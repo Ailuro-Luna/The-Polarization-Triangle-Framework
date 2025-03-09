@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any
 
+
 @dataclass
 class SimulationConfig:
     num_agents: int = 100
@@ -22,7 +23,7 @@ class SimulationConfig:
     cluster_identity: bool = False
     cluster_morality: bool = False
     cluster_opinion: bool = False
-    cluster_identity_prob: float = 0.8
+    cluster_identity_prob: float = 1
     cluster_morality_prob: float = 0.8
     cluster_opinion_prob: float = 0.8
     # 仿真更新参数
@@ -33,6 +34,14 @@ class SimulationConfig:
     p_radical_low: float = 0.3
     p_conv_high: float = 0.7
     p_conv_low: float = 0.3
+
+    # 身份与issue关联性参数 (添加)
+    identity_issue_association: Dict[int, float] = field(default_factory=lambda: {
+        1: 0.3,  # 身份1与issue的关联性，范围-1到1
+        -1: -0.3  # 身份-1与issue的关联性，范围-1到1
+    })
+    # 身份对意见影响的强度因子
+    identity_influence_factor: float = 0.3
 
 # 各种预设配置：
 default_config = SimulationConfig()
@@ -111,6 +120,71 @@ lfr_config = SimulationConfig(
     cluster_morality=True,
     cluster_opinion=True,
     cluster_opinion_prob=0.8
+)
+
+# 示例配置：强烈的身份与问题关联（强极化）
+strong_identity_config = SimulationConfig(
+    num_agents=500,
+    network_type="lfr",
+    opinion_distribution="twin_peak",
+    morality_mode="half",
+    cluster_identity=True,
+    cluster_morality=True,
+    cluster_opinion=True,
+    identity_issue_association={1: 0.8, -1: -0.8},  # 强烈的身份-问题关联
+    identity_influence_factor=0.15  # 较强的身份影响因子
+)
+
+# 示例配置：弱身份与问题关联（弱极化）
+weak_identity_config = SimulationConfig(
+    num_agents=500,
+    network_type="lfr",
+    opinion_distribution="twin_peak",
+    morality_mode="half",
+    cluster_identity=True,
+    cluster_morality=True,
+    cluster_opinion=True,
+    identity_issue_association={1: 0.2, -1: -0.2},  # 弱身份-问题关联
+    identity_influence_factor=0.05  # 较弱的身份影响因子
+)
+
+# 示例配置：单方面身份与问题关联（不对称极化）
+asymmetric_identity_config = SimulationConfig(
+    num_agents=500,
+    network_type="lfr",
+    opinion_distribution="twin_peak",
+    morality_mode="half",
+    cluster_identity=True,
+    cluster_morality=True,
+    cluster_opinion=True,
+    identity_issue_association={1: 0.8, -1: 0.0},  # 只有身份1与问题有强关联
+    identity_influence_factor=0.1
+)
+
+# 示例配置：全部高道德化情境（高道德极化）
+high_moral_config = SimulationConfig(
+    num_agents=500,
+    network_type="lfr",
+    opinion_distribution="twin_peak",
+    morality_mode="all1",  # 所有智能体都有道德化倾向
+    cluster_identity=True,
+    cluster_morality=True,
+    cluster_opinion=True,
+    identity_issue_association={1: 0.5, -1: -0.5},
+    identity_influence_factor=0.1
+)
+
+# 示例配置：全部低道德化情境（低道德极化）
+low_moral_config = SimulationConfig(
+    num_agents=500,
+    network_type="lfr",
+    opinion_distribution="twin_peak",
+    morality_mode="all0",  # 所有智能体都没有道德化倾向
+    cluster_identity=True,
+    cluster_morality=True,
+    cluster_opinion=True,
+    identity_issue_association={1: 0.5, -1: -0.5},
+    identity_influence_factor=0.1
 )
 
 # 默认使用的配置

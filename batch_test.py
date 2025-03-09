@@ -26,7 +26,8 @@ def batch_test():
     base_dir = "batch_results"
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
-    for id_mode in ["random", "clustered"]:
+    # for id_mode in ["random", "clustered"]:
+    for id_mode in ["clustered"]:
         for mor_mode in ["random", "clustered"]:
             for op_mode in ["random", "clustered"]:
                 for op_dist in ["uniform", "single_peak", "twin_peak"]:
