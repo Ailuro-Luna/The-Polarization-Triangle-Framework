@@ -1,0 +1,33 @@
+{
+  "formatOnSave": true,
+  "formatOnPaste": true,
+  "pythonPath": "python",
+  "codeActionsOnSave": {
+    "source.organizeImports": true
+  },
+  "editor.rulers": [100],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.DS_Store": true,
+    "**/.git": true,
+    "**/.idea": true,
+    "**/.vscode": true,
+    "**/batch_results": true,
+    "**/comparison_results": true
+  },
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.mypyEnabled": true,
+  "python.analysis.extraPaths": ["."],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": true,
+  "editor.wordWrap": "off",
+  "search.exclude": {
+    "**/batch_results": true,
+    "**/comparison_results": true,
+    "**/__pycache__": true
+  }
+} 
