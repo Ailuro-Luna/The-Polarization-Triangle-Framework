@@ -159,3 +159,196 @@ def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_sca
     plt.tight_layout()
     plt.savefig(waterfall_filename, dpi=300)
     plt.close()
+
+def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
+    """
+    绘制规则使用频率随时间的变化图。
+    
+    参数:
+    rule_counts_history -- 包含每个时间步骤规则使用次数的列表，形状为(time_steps, 8)
+    title -- 图表标题
+    filename -- 保存文件名
+    smooth -- 是否平滑曲线
+    window_size -- 平滑窗口大小
+    """
+    # 转换为numpy数组
+    rule_counts = np.array(rule_counts_history)
+    
+    # 检查数组是否为空
+    if rule_counts.size == 0:
+        print("警告: 规则使用历史记录为空")
+        return
+    
+    # 获取时间步数
+    time_steps = rule_counts.shape[0]
+    
+    # 准备时间轴
+    time = np.arange(time_steps)
+    
+    # 规则名称
+    rule_names = [
+        "Rule 1: Same dir, Same ID, Non-moral, Converge",
+        "Rule 2: Same dir, Diff ID, Non-moral, Converge",
+        "Rule 3: Same dir, Same ID, Moral, Polarize",
+        "Rule 4: Same dir, Diff ID, Moral, Polarize",
+        "Rule 5: Diff dir, Same ID, Non-moral, Converge",
+        "Rule 6: Diff dir, Diff ID, Non-moral, Converge",
+        "Rule 7: Diff dir, Same ID, Moral, Converge",
+        "Rule 8: Diff dir, Diff ID, Moral, Polarize"
+    ]
+    
+    # 设置颜色
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
+              '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+    
+    plt.figure(figsize=(12, 8))
+    
+    # 平滑数据（如果需要）
+    if smooth and time_steps > window_size:
+        for i in range(8):
+            # 使用移动平均进行平滑
+            smoothed = np.convolve(rule_counts[:, i], 
+                                   np.ones(window_size)/window_size, 
+                                   mode='valid')
+            # 调整时间轴以匹配平滑后的数据
+            smoothed_time = np.arange(len(smoothed)) + window_size // 2
+            plt.plot(smoothed_time, smoothed, label=rule_names[i], color=colors[i], linewidth=2)
+    else:
+        # 不平滑处理
+        for i in range(8):
+            plt.plot(time, rule_counts[:, i], label=rule_names[i], color=colors[i], linewidth=2)
+    
+    plt.xlabel('Time Step')
+    plt.ylabel('Rule Application Count')
+    plt.title(title)
+    plt.legend(loc='best')
+    plt.grid(True, alpha=0.3)
+    
+    # 保存图表
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+    # 额外创建一个堆叠面积图，显示规则使用的比例
+    plt.figure(figsize=(12, 8))
+    
+    # 计算每个时间步的规则使用总数
+    total_counts = np.sum(rule_counts, axis=1)
+    # 避免除以零
+    total_counts = np.where(total_counts == 0, 1, total_counts)
+    
+    # 计算规则使用的比例
+    proportions = rule_counts / total_counts[:, np.newaxis]
+    
+    # 创建堆叠面积图
+    plt.stackplot(time, 
+                 [proportions[:, i] for i in range(8)],
+                 labels=rule_names,
+                 colors=colors,
+                 alpha=0.7)
+    
+    plt.xlabel('Time Step')
+    plt.ylabel('Rule Application Proportion')
+    plt.title(f"{title} - Proportional Usage")
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
+    plt.grid(True, alpha=0.3)
+    
+    # 保存比例图
+    proportion_filename = filename.replace('.png', '_proportions.png')
+    plt.tight_layout()
+    plt.savefig(proportion_filename)
+    plt.close()
+
+def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
+    """
+    绘制规则累积使用次数随时间的变化图。
+    
+    参数:
+    rule_counts_history -- 包含每个时间步骤规则使用次数的列表，形状为(time_steps, 8)
+    title -- 图表标题
+    filename -- 保存文件名
+    smooth -- 是否平滑曲线
+    window_size -- 平滑窗口大小
+    """
+    # 转换为numpy数组
+    rule_counts = np.array(rule_counts_history)
+    
+    # 检查数组是否为空
+    if rule_counts.size == 0:
+        print("警告: 规则使用历史记录为空")
+        return
+    
+    # 获取时间步数
+    time_steps = rule_counts.shape[0]
+    
+    # 计算累积次数
+    cumulative_counts = np.cumsum(rule_counts, axis=0)
+    
+    # 准备时间轴
+    time = np.arange(time_steps)
+    
+    # 规则名称
+    rule_names = [
+        "Rule 1: Same dir, Same ID, Non-moral, Converge",
+        "Rule 2: Same dir, Diff ID, Non-moral, Converge",
+        "Rule 3: Same dir, Same ID, Moral, Polarize",
+        "Rule 4: Same dir, Diff ID, Moral, Polarize",
+        "Rule 5: Diff dir, Same ID, Non-moral, Converge",
+        "Rule 6: Diff dir, Diff ID, Non-moral, Converge",
+        "Rule 7: Diff dir, Same ID, Moral, Converge",
+        "Rule 8: Diff dir, Diff ID, Moral, Polarize"
+    ]
+    
+    # 设置颜色
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
+              '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+    
+    plt.figure(figsize=(12, 8))
+    
+    # 平滑数据（如果需要）
+    if smooth and time_steps > window_size:
+        for i in range(8):
+            # 使用移动平均进行平滑
+            smoothed = np.convolve(cumulative_counts[:, i], 
+                                   np.ones(window_size)/window_size, 
+                                   mode='valid')
+            # 调整时间轴以匹配平滑后的数据
+            smoothed_time = np.arange(len(smoothed)) + window_size // 2
+            plt.plot(smoothed_time, smoothed, label=rule_names[i], color=colors[i], linewidth=2)
+    else:
+        # 不平滑处理
+        for i in range(8):
+            plt.plot(time, cumulative_counts[:, i], label=rule_names[i], color=colors[i], linewidth=2)
+    
+    plt.xlabel('Time Step')
+    plt.ylabel('Cumulative Rule Application Count')
+    plt.title(title)
+    plt.legend(loc='best')
+    plt.grid(True, alpha=0.3)
+    
+    # 保存图表
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+    # 额外创建一个堆叠面积图，显示规则使用的比例
+    plt.figure(figsize=(12, 8))
+    
+    # 创建堆叠面积图
+    plt.stackplot(time, 
+                 [cumulative_counts[:, i] for i in range(8)],
+                 labels=rule_names,
+                 colors=colors,
+                 alpha=0.7)
+    
+    plt.xlabel('Time Step')
+    plt.ylabel('Cumulative Rule Application Count')
+    plt.title(f"{title} - Stacked View")
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
+    plt.grid(True, alpha=0.3)
+    
+    # 保存堆叠图
+    stacked_filename = filename.replace('.png', '_stacked.png')
+    plt.tight_layout()
+    plt.savefig(stacked_filename)
+    plt.close()

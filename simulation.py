@@ -45,6 +45,9 @@ class Simulation:
         self.identity_issue_mapping = config.identity_issue_mapping
         self.identity_influence_factor = config.identity_influence_factor
 
+        # 初始化规则计数器历史记录
+        self.rule_counts_history = []
+
         if self.network_type in ['community', 'lfr']:
             for node in self.G.nodes():
                 block = None
@@ -296,7 +299,7 @@ class Simulation:
     # 修改step方法
     def step(self):
         # 首先，应用原始意见更新
-        self.opinions = update_opinions(
+        self.opinions, rule_counts = update_opinions(
             self.opinions,
             self.adj_matrix,
             self.config.influence_factor,
@@ -307,6 +310,9 @@ class Simulation:
             self.identities,
             self.morals
         )
+        
+        # 存储规则计数
+        self.rule_counts_history.append(rule_counts)
 
         # 然后，应用身份影响
         self.identity_influence_step()
@@ -316,6 +322,9 @@ class Simulation:
 def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_radical_low, p_conv_high, p_conv_low,
                     identities, morals):
     n = opinions.shape[0]
+    # Initialize rule counters
+    rule_counts = np.zeros(8, dtype=np.int32)
+    
     for i in range(n):
         count = 0
         neighbor = -1
@@ -332,19 +341,36 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
         same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
 
         if same_dir:
-            # 规则1和2：意见同向，moral=0，均以较低概率收敛（使用 p_conv_low）
             if m_i == 0:
-                if np.random.rand() < p_conv_low:
-                    o_i = o_i + influence_factor * (o_j - o_i)
-            # 规则3和4：意见同向，moral=1，均以较低概率使意见走向更极化（使用 p_radical_low）
+                # 规则1：意见同向，身份相同，moral=0，以较低概率收敛（使用 p_conv_low）
+                if identities[i] == identities[neighbor]:
+                    if np.random.rand() < p_conv_low:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[0] += 1  # 规则1计数
+                # 规则2：意见同向，身份不同，moral=0，以较低概率收敛（使用 p_conv_low）
+                else:
+                    if np.random.rand() < p_conv_low:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[1] += 1  # 规则2计数
             else:  # m_i == 1
-                if np.random.rand() < p_radical_low:
-                    # 修改：添加"极化阻力因子"，使接近极端值更困难
-                    resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
-                    if o_i > 0:
-                        o_i = o_i + influence_factor * (1 - o_i) * resistance
-                    else:
-                        o_i = o_i - influence_factor * (1 + o_i) * resistance
+                # 修改：添加"极化阻力因子"，使接近极端值更困难
+                resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
+                # 规则3：意见同向，道德=1，身份相同，以较低概率使意见走向更极化（使用 p_radical_low）
+                if identities[i] == identities[neighbor]:
+                    if np.random.rand() < p_radical_low:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * (1 + o_i) * resistance
+                        rule_counts[2] += 1  # 规则3计数
+                # 规则4：意见同向，道德=1，身份不同，以较低概率使意见走向更极化（使用 p_radical_low）
+                else:
+                    if np.random.rand() < p_radical_low:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * (1 + o_i) * resistance
+                        rule_counts[3] += 1  # 规则4计数
         else:
             # 意见不同方向
             if m_i == 0:
@@ -352,15 +378,18 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
                 if identities[i] == identities[neighbor]:
                     if np.random.rand() < p_conv_high:
                         o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[4] += 1  # 规则5计数
                 # 规则6：不同方向，moral=0，身份不同，收敛概率较低（p_conv_low）
                 else:
                     if np.random.rand() < p_conv_low:
                         o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[5] += 1  # 规则6计数
             else:  # m_i == 1
                 # 规则7：不同方向，moral=1，身份相同，收敛概率较低（p_conv_low）
                 if identities[i] == identities[neighbor]:
                     if np.random.rand() < p_conv_low:
                         o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[6] += 1  # 规则7计数
                 # 规则8：不同方向，moral=1，身份不同，意见以较高概率极化（p_radical_high）
                 else:
                     if np.random.rand() < p_radical_high:
@@ -370,9 +399,10 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
                             o_i = o_i + influence_factor * (1 - o_i) * resistance
                         else:
                             o_i = o_i - influence_factor * (1 + o_i) * resistance
+                        rule_counts[7] += 1  # 规则8计数
         if o_i > 1:
             o_i = 1
         elif o_i < -1:
             o_i = -1
         opinions[i] = o_i
-    return opinions
+    return opinions, rule_counts
