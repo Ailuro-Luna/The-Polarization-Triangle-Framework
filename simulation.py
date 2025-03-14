@@ -388,7 +388,7 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
                 # 规则7：不同方向，moral=1，身份相同，收敛概率较低（p_conv_low）
                 if identities[i] == identities[neighbor]:
                     if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
+                        o_i = o_i + influence_factor * (abs(o_j)/o_j - o_i)
                         rule_counts[6] += 1  # 规则7计数
                 # 规则8：不同方向，moral=1，身份不同，意见以较高概率极化（p_radical_high）
                 else:
