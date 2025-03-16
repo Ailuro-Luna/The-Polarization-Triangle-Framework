@@ -18,7 +18,7 @@ def run_multiple_simulations(config, num_simulations=10, time_steps=100):
     time_steps -- 每次模拟的时间步数
     
     返回:
-    average_rule_counts -- 平均规则使用次数，形状为(time_steps, 8)
+    average_rule_counts -- 平均规则使用次数，形状为(time_steps, 16)
     """
     # 初始化累计规则使用计数
     cumulative_rule_counts = None
@@ -88,14 +88,22 @@ def main():
     
     # 输出各规则的平均使用频率
     rule_names = [
-        "Rule 1: Same dir, Same ID, Non-moral, Converge",
-        "Rule 2: Same dir, Diff ID, Non-moral, Converge",
-        "Rule 3: Same dir, Same ID, Moral, Polarize",
-        "Rule 4: Same dir, Diff ID, Moral, Polarize",
-        "Rule 5: Diff dir, Same ID, Non-moral, Converge",
-        "Rule 6: Diff dir, Diff ID, Non-moral, Converge",
-        "Rule 7: Diff dir, Same ID, Moral, Converge",
-        "Rule 8: Diff dir, Diff ID, Moral, Polarize"
+        "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
+        "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
+        "Rule 3: Same dir, Same ID, {1,0}, Medium Pull",
+        "Rule 4: Same dir, Same ID, {1,1}, High Polarization",
+        "Rule 5: Same dir, Diff ID, {0,0}, Medium Convergence",
+        "Rule 6: Same dir, Diff ID, {0,1}, Low Pull",
+        "Rule 7: Same dir, Diff ID, {1,0}, Low Pull",
+        "Rule 8: Same dir, Diff ID, {1,1}, Medium Polarization",
+        "Rule 9: Diff dir, Same ID, {0,0}, Very High Convergence",
+        "Rule 10: Diff dir, Same ID, {0,1}, Medium Convergence/Pull",
+        "Rule 11: Diff dir, Same ID, {1,0}, Low Resistance",
+        "Rule 12: Diff dir, Same ID, {1,1}, Low Polarization",
+        "Rule 13: Diff dir, Diff ID, {0,0}, Low Convergence",
+        "Rule 14: Diff dir, Diff ID, {0,1}, High Pull",
+        "Rule 15: Diff dir, Diff ID, {1,0}, High Resistance",
+        "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
     ]
     
     print("\n各规则平均使用频率统计:")

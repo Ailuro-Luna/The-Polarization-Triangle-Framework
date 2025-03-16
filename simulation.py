@@ -322,8 +322,30 @@ class Simulation:
 def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_radical_low, p_conv_high, p_conv_low,
                     identities, morals):
     n = opinions.shape[0]
-    # Initialize rule counters
-    rule_counts = np.zeros(8, dtype=np.int32)
+    # 初始化规则计数器 - 从8种规则扩展到16种规则
+    rule_counts = np.zeros(16, dtype=np.int32)
+    
+    # 新的概率参数
+    # 收敛概率参数(convergence)
+    p_conv_vhigh = 0.9  # 非常高的收敛概率
+    p_conv_high = 0.7   # 高收敛概率，保持原值
+    p_conv_mid = 0.5    # 中等收敛概率
+    p_conv_low = 0.3    # 低收敛概率，保持原值
+
+    # 拉动概率参数(pulling)
+    p_pull_high = 0.8   # 高拉动概率
+    p_pull_mid = 0.6    # 中等拉动概率
+    p_pull_low = 0.4    # 低拉动概率
+
+    # 极化概率参数(polarization)
+    p_polar_vhigh = 0.9  # 非常高的极化概率
+    p_polar_high = 0.7   # 高极化概率
+    p_polar_mid = 0.5    # 中等极化概率
+    p_polar_low = 0.3    # 低极化概率
+    
+    # 抵抗概率参数(resistance)
+    p_resist_high = 0.8  # 高抵抗概率
+    p_resist_low = 0.4   # 低抵抗概率
     
     for i in range(n):
         count = 0
@@ -335,71 +357,135 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
                     neighbor = j
         if neighbor == -1:
             continue
+            
         o_i = opinions[i]
         o_j = opinions[neighbor]
         m_i = morals[i]
+        m_j = morals[neighbor]  # 获取邻居的道德状态
         same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
-
+        same_id = (identities[i] == identities[neighbor])
+        
+        # 极化阻力因子，使接近极端值更困难
+        resistance = 1 - (abs(o_i) ** 3)  # 在极端值处阻力最大
+        
+        # 同方向意见
         if same_dir:
-            if m_i == 0:
-                # 规则1：意见同向，身份相同，moral=0，以较低概率收敛（使用 p_conv_low）
-                if identities[i] == identities[neighbor]:
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[0] += 1  # 规则1计数
-                # 规则2：意见同向，身份不同，moral=0，以较低概率收敛（使用 p_conv_low）
-                else:
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[1] += 1  # 规则2计数
-            else:  # m_i == 1
-                # 修改：添加"极化阻力因子"，使接近极端值更困难
-                resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
-                # 规则3：意见同向，道德=1，身份相同，以较低概率使意见走向更极化（使用 p_radical_low）
-                if identities[i] == identities[neighbor]:
-                    if np.random.rand() < p_radical_low:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * (1 + o_i) * resistance
-                        rule_counts[2] += 1  # 规则3计数
-                # 规则4：意见同向，道德=1，身份不同，以较低概率使意见走向更极化（使用 p_radical_low）
-                else:
-                    if np.random.rand() < p_radical_low:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * (1 + o_i) * resistance
-                        rule_counts[3] += 1  # 规则4计数
-        else:
-            # 意见不同方向
-            if m_i == 0:
-                # 规则5：不同方向，moral=0，身份相同，收敛概率较高（p_conv_high）
-                if identities[i] == identities[neighbor]:
+            # 规则1-8：意见同向，不同身份关系和道德状态组合
+            if same_id:  # 身份相同
+                if m_i == 0 and m_j == 0:  # {0,0}
+                    # 规则1：意见同向，身份相同，双方不道德化，高度收敛
                     if np.random.rand() < p_conv_high:
                         o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[4] += 1  # 规则5计数
-                # 规则6：不同方向，moral=0，身份不同，收敛概率较低（p_conv_low）
-                else:
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[5] += 1  # 规则6计数
-            else:  # m_i == 1
-                # 规则7：不同方向，moral=1，身份相同，收敛概率较低（p_conv_low）
-                if identities[i] == identities[neighbor]:
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (abs(o_j)/o_j - o_i)
-                        rule_counts[6] += 1  # 规则7计数
-                # 规则8：不同方向，moral=1，身份不同，意见以较高概率极化（p_radical_high）
-                else:
-                    if np.random.rand() < p_radical_high:
-                        # 修改：添加"极化阻力因子"，使接近极端值更困难
-                        resistance = 1 - (abs(o_i) ** 3)  # 二次函数，在极端值处阻力最大
+                        rule_counts[0] += 1
+                elif m_i == 0 and m_j == 1:  # {0,1}
+                    # 规则2：意见同向，身份相同，自己不道德化对方道德化，中度被拉向极端
+                    if np.random.rand() < p_pull_mid:
+                        if o_j > 0:
+                            o_i = o_i + influence_factor * (o_j + 0.2 * (1 - o_j)) - o_i
+                        else:
+                            o_i = o_i + influence_factor * (o_j - 0.2 * (1 + o_j)) - o_i
+                        rule_counts[1] += 1
+                elif m_i == 1 and m_j == 0:  # {1,0}
+                    # 规则3：意见同向，身份相同，自己道德化对方不道德化，中度拉他向极端
+                    if np.random.rand() < p_pull_mid:
                         if o_i > 0:
                             o_i = o_i + influence_factor * (1 - o_i) * resistance
                         else:
                             o_i = o_i - influence_factor * (1 + o_i) * resistance
-                        rule_counts[7] += 1  # 规则8计数
+                        rule_counts[2] += 1
+                else:  # m_i == 1 and m_j == 1, {1,1}
+                    # 规则4：意见同向，身份相同，双方道德化，高度极化
+                    if np.random.rand() < p_polar_high:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * (1 + o_i) * resistance
+                        rule_counts[3] += 1
+            else:  # 身份不同
+                if m_i == 0 and m_j == 0:  # {0,0}
+                    # 规则5：意见同向，身份不同，双方不道德化，中度收敛
+                    if np.random.rand() < p_conv_mid:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[4] += 1
+                elif m_i == 0 and m_j == 1:  # {0,1}
+                    # 规则6：意见同向，身份不同，自己不道德化对方道德化，低度被拉向极端
+                    if np.random.rand() < p_pull_low:
+                        if o_j > 0:
+                            o_i = o_i + influence_factor * (o_j + 0.1 * (1 - o_j)) - o_i
+                        else:
+                            o_i = o_i + influence_factor * (o_j - 0.1 * (1 + o_j)) - o_i
+                        rule_counts[5] += 1
+                elif m_i == 1 and m_j == 0:  # {1,0}
+                    # 规则7：意见同向，身份不同，自己道德化对方不道德化，低度拉他向极端
+                    if np.random.rand() < p_pull_low:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * 0.7 * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * 0.7 * (1 + o_i) * resistance
+                        rule_counts[6] += 1
+                else:  # m_i == 1 and m_j == 1, {1,1}
+                    # 规则8：意见同向，身份不同，双方道德化，中度极化
+                    if np.random.rand() < p_polar_mid:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * 0.8 * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * 0.8 * (1 + o_i) * resistance
+                        rule_counts[7] += 1
+        else:  # 不同方向意见
+            # 规则9-16：意见不同向，不同身份关系和道德状态组合
+            if same_id:  # 身份相同
+                if m_i == 0 and m_j == 0:  # {0,0}
+                    # 规则9：意见不同向，身份相同，双方不道德化，非常高收敛
+                    if np.random.rand() < p_conv_vhigh:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[8] += 1
+                elif m_i == 0 and m_j == 1:  # {0,1}
+                    # 规则10：意见不同向，身份相同，自己不道德化对方道德化，中度收敛或被拉向他方
+                    if np.random.rand() < p_conv_mid:
+                        o_i = o_i + influence_factor * 1.2 * (o_j - o_i)
+                        rule_counts[9] += 1
+                elif m_i == 1 and m_j == 0:  # {1,0}
+                    # 规则11：意见不同向，身份相同，自己道德化对方不道德化，低度抵抗并持守立场
+                    if np.random.rand() < p_resist_low:
+                        o_i = o_i + influence_factor * 0.5 * (abs(o_j)/o_j - o_i)
+                        rule_counts[10] += 1
+                else:  # m_i == 1 and m_j == 1, {1,1}
+                    # 规则12：意见不同向，身份相同，双方道德化，低度双方极化
+                    if np.random.rand() < p_polar_low:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * 0.6 * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * 0.6 * (1 + o_i) * resistance
+                        rule_counts[11] += 1
+            else:  # 身份不同
+                if m_i == 0 and m_j == 0:  # {0,0}
+                    # 规则13：意见不同向，身份不同，双方不道德化，低度收敛
+                    if np.random.rand() < p_conv_low:
+                        o_i = o_i + influence_factor * (o_j - o_i)
+                        rule_counts[12] += 1
+                elif m_i == 0 and m_j == 1:  # {0,1}
+                    # 规则14：意见不同向，身份不同，自己不道德化对方道德化，高度被拉向他方
+                    if np.random.rand() < p_pull_high:
+                        o_i = o_i + influence_factor * 1.5 * (o_j - o_i)
+                        rule_counts[13] += 1
+                elif m_i == 1 and m_j == 0:  # {1,0}
+                    # 规则15：意见不同向，身份不同，自己道德化对方不道德化，高度抵抗并走向极端
+                    if np.random.rand() < p_resist_high:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * 1.2 * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * 1.2 * (1 + o_i) * resistance
+                        rule_counts[14] += 1
+                else:  # m_i == 1 and m_j == 1, {1,1}
+                    # 规则16：意见不同向，身份不同，双方道德化，极高度双方极化
+                    if np.random.rand() < p_polar_vhigh:
+                        if o_i > 0:
+                            o_i = o_i + influence_factor * 1.5 * (1 - o_i) * resistance
+                        else:
+                            o_i = o_i - influence_factor * 1.5 * (1 + o_i) * resistance
+                        rule_counts[15] += 1
+                            
+        # 确保意见值在-1到1之间
         if o_i > 1:
             o_i = 1
         elif o_i < -1:

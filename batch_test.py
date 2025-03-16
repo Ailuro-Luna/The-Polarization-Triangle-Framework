@@ -139,14 +139,22 @@ def batch_test():
                                                   
                         # 输出规则使用统计信息
                         rule_names = [
-                            "Rule 1: Same dir, Same ID, Non-moral, Converge",
-                            "Rule 2: Same dir, Diff ID, Non-moral, Converge",
-                            "Rule 3: Same dir, Same ID, Moral, Polarize",
-                            "Rule 4: Same dir, Diff ID, Moral, Polarize",
-                            "Rule 5: Diff dir, Same ID, Non-moral, Converge",
-                            "Rule 6: Diff dir, Diff ID, Non-moral, Converge",
-                            "Rule 7: Diff dir, Same ID, Moral, Converge",
-                            "Rule 8: Diff dir, Diff ID, Moral, Polarize"
+                            "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
+                            "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
+                            "Rule 3: Same dir, Same ID, {1,0}, Medium Pull",
+                            "Rule 4: Same dir, Same ID, {1,1}, High Polarization",
+                            "Rule 5: Same dir, Diff ID, {0,0}, Medium Convergence",
+                            "Rule 6: Same dir, Diff ID, {0,1}, Low Pull",
+                            "Rule 7: Same dir, Diff ID, {1,0}, Low Pull",
+                            "Rule 8: Same dir, Diff ID, {1,1}, Medium Polarization",
+                            "Rule 9: Diff dir, Same ID, {0,0}, Very High Convergence",
+                            "Rule 10: Diff dir, Same ID, {0,1}, Medium Convergence/Pull",
+                            "Rule 11: Diff dir, Same ID, {1,0}, Low Resistance",
+                            "Rule 12: Diff dir, Same ID, {1,1}, Low Polarization",
+                            "Rule 13: Diff dir, Diff ID, {0,0}, Low Convergence",
+                            "Rule 14: Diff dir, Diff ID, {0,1}, High Pull",
+                            "Rule 15: Diff dir, Diff ID, {1,0}, High Resistance",
+                            "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
                         ]
                         
                         # 计算总规则使用次数
@@ -217,11 +225,11 @@ def batch_test_morality_rates():
         )
     
     # 创建比较图，展示不同道德化率下各规则的累积使用
-    plt.figure(figsize=(14, 10))
+    plt.figure(figsize=(16, 12))
     
     # 为比较图创建subplots
-    for i in range(8):
-        plt.subplot(2, 4, i+1)
+    for i in range(16):
+        plt.subplot(4, 4, i+1)
         for mor_rate in morality_rates:
             data = rule_cumulative_counts_by_rate[mor_rate]
             plt.plot(np.cumsum(data[:, i]), label=f"Rate={mor_rate:.1f}")
