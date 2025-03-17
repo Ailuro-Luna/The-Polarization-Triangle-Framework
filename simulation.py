@@ -241,60 +241,86 @@ class Simulation:
         else:
             return np.random.uniform(-1, 1)
 
-    # 添加新方法：身份影响步骤
+    # 身份影响步骤 - 新实现
     def identity_influence_step(self):
-        for i in range(self.num_agents):
+        """
+        实现基于三角极化框架的身份影响机制
+        
+        该方法使用新的算法计算每个agent的身份规范强度，然后基于这个强度修改意见交流过程。
+        算法分为两个阶段：
+        1. 计算每个agent的身份规范强度S[i]
+        2. 在agent交互中应用这个强度修改意见更新
+        """
+        n = self.num_agents
+        # 第一阶段：计算所有agent的身份规范强度
+        identity_norm_strengths = np.zeros(n, dtype=np.float64)
+        
+        for i in range(n):
             agent_identity = self.identities[i]
-
-            # 第一部分：处理同身份邻居的影响
+            
+            # 找出所有同身份邻居
             same_identity_neighbors = []
-            for j in range(self.num_agents):
+            for j in range(n):
                 if self.adj_matrix[i, j] == 1 and self.identities[j] == agent_identity:
                     same_identity_neighbors.append(j)
+            
+            # 如果没有同身份邻居，则跳过
+            if not same_identity_neighbors:
+                continue
+            
+            # 计算关键变量
+            moral_neighbors = [j for j in same_identity_neighbors if self.morals[j] == 1]
+            moral_positive_neighbors = [j for j in moral_neighbors if self.opinions[j] > 0]
+            
+            # 计算道德化邻居的总数
+            total_moral = len(moral_neighbors)
+            
+            # 计算道德化且持正面意见的邻居数量
+            moral_positive_count = len(moral_positive_neighbors)
+            
+            # 计算道德化比例 y
+            y = total_moral / len(same_identity_neighbors) if same_identity_neighbors else 0
+            
+            # 计算道德化邻居中持正面意见的比例 z
+            z = moral_positive_count / total_moral if total_moral > 0 else 0.5
+            
+            # 计算身份规范强度 S = (1 - 4*z(1-z))*y
+            identity_norm_strengths[i] = (1 - 4 * z * (1 - z)) * y
+        
+        # 第二阶段：应用身份规范强度修改意见更新
+        # 为每个agent随机选择一个邻居进行交互
+        for i in range(n):
+            # 找出所有邻居
+            neighbors = []
+            for j in range(n):
+                if self.adj_matrix[i, j] == 1:
+                    neighbors.append(j)
+            
+            if not neighbors:
+                continue
+            
+            # 随机选择一个邻居
+            j = np.random.choice(neighbors)
+            
+            # 获取身份规范强度
+            S_i = identity_norm_strengths[i]
+            S_j = identity_norm_strengths[j]
+            
+            # 计算身份相似性（克罗内克函数）
+            identity_same = 1 if self.identities[i] == self.identities[j] else 0
+            
+            # 身份影响因子 (A - (1-2*delta)*S_i*S_j)
+            A = self.config.identity_antagonism_threshold
+            identity_factor = A - (1 - 2 * identity_same) * S_i * S_j
+            
+            # 计算意见变化
+            opinion_difference = self.opinions[j] - self.opinions[i]
+            opinion_change = identity_factor * self.config.influence_factor * opinion_difference
 
-            if same_identity_neighbors:
-                # 计算同身份邻居的平均意见和道德值
-                avg_opinion = np.mean([self.opinions[j] for j in same_identity_neighbors])
-                avg_morality = np.mean([self.morals[j] for j in same_identity_neighbors])
-
-                # 使用感知到的道德值作为被影响的概率
-                if np.random.rand() < avg_morality:
-                    # 获取身份与议题关联
-                    association = self.identity_issue_mapping.get(agent_identity, 0)
-
-                    # 计算影响强度
-                    influence = self.identity_influence_factor * abs(association)
-                    resistance = 1 - (abs(self.opinions[i]) ** 2)
-
-                    # 应用向群体平均意见的影响
-                    self.opinions[i] = self.opinions[i] + influence * (avg_opinion - self.opinions[i])
-
-                    # 确保意见保持在界限内
-                    self.opinions[i] = np.clip(self.opinions[i], -1, 1)
-
-            # 第二部分：直接向身份关联立场的拉拢效应
-            # 以 identity_influence_factor 作为概率决定是否受到拉拢
-            if np.random.rand() < self.identity_influence_factor:
-                # 获取该身份关联的议题立场
-                target_position = self.identity_issue_mapping.get(agent_identity, 0)
-
-                # 计算拉拢效应强度（与当前立场差距的一小部分）
-                pull_strength = 0.05  # 可以调整这个值控制拉拢强度
-
-                # 应用拉拢效应，向目标位置移动
-                direction = np.sign(target_position - self.opinions[i])
-                if direction != 0:  # 只有当agent不在目标位置时才移动
-                    # 移动公式：当前位置 + 方向 * 拉拢强度 * (1 - 到达目标位置后的阻力)
-                    resistance = abs(self.opinions[i] - target_position) / 2  # 接近目标位置时阻力增加
-                    self.opinions[i] = self.opinions[i] + direction * pull_strength * resistance
-
-                    # 确保不会越过目标位置（防止"过冲"）
-                    if (direction > 0 and self.opinions[i] > target_position) or \
-                            (direction < 0 and self.opinions[i] < target_position):
-                        self.opinions[i] = target_position
-
-                    # 确保意见保持在界限内
-                    self.opinions[i] = np.clip(self.opinions[i], -1, 1)
+            # print(f"agent {i}, identity_norm_strengths: {S_i}, opinion_change: {opinion_change}")
+            
+            # 应用意见变化
+            self.opinions[i] = np.clip(self.opinions[i] + opinion_change, -1, 1)
 
     # 修改step方法
     def step(self):
@@ -362,6 +388,10 @@ def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_ra
         o_j = opinions[neighbor]
         m_i = morals[i]
         m_j = morals[neighbor]  # 获取邻居的道德状态
+
+        if m_i == 1:
+            o_j = o_j/(abs(o_j))
+
         same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
         same_id = (identities[i] == identities[neighbor])
         

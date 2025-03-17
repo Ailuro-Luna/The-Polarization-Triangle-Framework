@@ -38,6 +38,9 @@ class SimulationConfig:
     # 身份与议题关联参数
     identity_issue_mapping: Dict[int, float] = field(default_factory=lambda: {1: 0.3, -1: -0.3})
     identity_influence_factor: float = 0.2
+    
+    # 身份规范强度参数
+    identity_antagonism_threshold: float = 0.8  # 小于1的常数参数A，定义对抗阈值
 
 # 各种预设配置：
 default_config = SimulationConfig()
