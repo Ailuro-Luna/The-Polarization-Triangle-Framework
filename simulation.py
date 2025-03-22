@@ -80,6 +80,13 @@ class Simulation:
         self.morals = np.empty(self.num_agents, dtype=np.int32)
         self.identities = np.empty(self.num_agents, dtype=np.int32)
 
+        # 添加新的模型参数
+        self.delta = 0.1  # 意见衰减率
+        self.u = np.ones(self.num_agents) * 0.1  # 意见激活系数
+        self.alpha = np.ones(self.num_agents) * 0.5  # 自我激活系数
+        self.beta = 0.5  # 社会影响系数
+        self.gamma = np.ones(self.num_agents) * 0.5  # 道德化影响系数
+        
         self._init_identities()
         self._init_morality()
         self._init_opinions()
@@ -241,284 +248,137 @@ class Simulation:
         else:
             return np.random.uniform(-1, 1)
 
-    # 身份影响步骤 - 新实现
-    def identity_influence_step(self):
+    # 基于极化三角框架的感知意见计算
+    def calculate_perceived_opinion(self, i, j):
         """
-        实现基于三角极化框架的身份影响机制
+        计算agent i对agent j的意见的感知
         
-        该方法使用新的算法计算每个agent的身份规范强度，然后基于这个强度修改意见交流过程。
-        算法分为两个阶段：
-        1. 计算每个agent的身份规范强度S[i]
-        2. 在agent交互中应用这个强度修改意见更新
+        参数:
+        i -- 观察者agent的索引
+        j -- 被观察agent的索引
+        
+        返回:
+        感知意见值，取值为-1, 0, 或1
         """
-        n = self.num_agents
-        # 第一阶段：计算所有agent的身份规范强度
-        identity_norm_strengths = np.zeros(n, dtype=np.float64)
+        z_j = self.opinions[j]
+        m_i = self.morals[i]
+        m_j = self.morals[j]
         
-        for i in range(n):
-            agent_identity = self.identities[i]
-            
-            # 找出所有同身份邻居
-            same_identity_neighbors = []
-            for j in range(n):
-                if self.adj_matrix[i, j] == 1 and self.identities[j] == agent_identity:
-                    same_identity_neighbors.append(j)
-            
-            # 如果没有同身份邻居，则跳过
-            if not same_identity_neighbors:
-                continue
-            
-            # 计算关键变量
-            moral_neighbors = [j for j in same_identity_neighbors if self.morals[j] == 1]
-            moral_positive_neighbors = [j for j in moral_neighbors if self.opinions[j] > 0]
-            
-            # 计算道德化邻居的总数
-            total_moral = len(moral_neighbors)
-            
-            # 计算道德化且持正面意见的邻居数量
-            moral_positive_count = len(moral_positive_neighbors)
-            
-            # 计算道德化比例 y
-            y = total_moral / len(same_identity_neighbors) if same_identity_neighbors else 0
-            
-            # 计算道德化邻居中持正面意见的比例 z
-            z = moral_positive_count / total_moral if total_moral > 0 else 0.5
-            
-            # 计算身份规范强度 S = (1 - 4*z(1-z))*y
-            identity_norm_strengths[i] = (1 - 4 * z * (1 - z)) * y
+        if z_j == 0:
+            return 0
+        elif (m_i == 1 or m_j == 1):
+            return np.sign(z_j)  # 返回z_j的符号(1或-1)
+        else:
+            return z_j  # 返回实际值
+
+    # 计算代理间关系系数
+    def calculate_relationship_coefficient(self, i, j):
+        """
+        计算agent i与agent j之间的关系系数
         
-        # 第二阶段：应用身份规范强度修改意见更新
-        # 为每个agent随机选择一个邻居进行交互
-        for i in range(n):
-            # 找出所有邻居
-            neighbors = []
-            for j in range(n):
-                if self.adj_matrix[i, j] == 1:
-                    neighbors.append(j)
+        参数:
+        i -- agent i的索引
+        j -- agent j的索引
+        
+        返回:
+        关系系数值
+        """
+        a_ij = self.adj_matrix[i, j]
+        if a_ij == 0:  # 如果不是邻居，关系系数为0
+            return 0
             
-            if not neighbors:
+        l_i = self.identities[i]
+        l_j = self.identities[j]
+        m_i = self.morals[i]
+        m_j = self.morals[j]
+        
+        sigma_ij = self.calculate_perceived_opinion(i, j)
+        sigma_ji = self.calculate_perceived_opinion(j, i)
+        
+        # 根据极化三角框架公式计算关系系数
+        if l_i != l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
+            return -a_ij
+        elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
+            # 计算tilde{sigma}_{sameIdentity} - agent i的同身份邻居的平均感知意见值
+            sigma_same_identity = self.calculate_same_identity_sigma(i)
+            return (a_ij / sigma_ji) * sigma_same_identity
+        else:
+            return a_ij
+
+    def calculate_same_identity_sigma(self, i):
+        """
+        计算agent i的同身份邻居的平均感知意见值
+        
+        参数:
+        i -- agent i的索引
+        
+        返回:
+        同身份邻居的平均感知意见值，如果没有同身份邻居则返回0
+        """
+        l_i = self.identities[i]
+        same_identity_sigmas = []
+        
+        # 遍历所有可能的邻居
+        for j in range(self.num_agents):
+            # 排除自己
+            if i == j:
                 continue
-            
-            # 随机选择一个邻居
-            j = np.random.choice(neighbors)
-            
-            # 获取身份规范强度
-            S_i = identity_norm_strengths[i]
-            S_j = identity_norm_strengths[j]
-            
-            # 计算身份相似性（克罗内克函数）
-            identity_same = 1 if self.identities[i] == self.identities[j] else 0
-            
-            # 身份影响因子 (A - (1-2*delta)*S_i*S_j)
-            A = self.config.identity_antagonism_threshold
-            identity_factor = A - (1 - 2 * identity_same) * S_i * S_j
-            
-            # 计算意见变化
-            opinion_difference = self.opinions[j] - self.opinions[i]
-            opinion_change = identity_factor * self.config.influence_factor * opinion_difference
+                
+            # 检查是否为邻居且身份相同
+            if self.adj_matrix[i, j] > 0 and self.identities[j] == l_i:
+                sigma_ij = self.calculate_perceived_opinion(i, j)
+                same_identity_sigmas.append(sigma_ij)
+        
+        # 计算平均值
+        if same_identity_sigmas:
+            return np.mean(same_identity_sigmas)
+        else:
+            # 如果没有同身份邻居，返回一个默认值
+            return 0
 
-            # print(f"agent {i}, identity_norm_strengths: {S_i}, opinion_change: {opinion_change}")
-            
-            # 应用意见变化
-            self.opinions[i] = np.clip(self.opinions[i] + opinion_change, -1, 1)
-
-    # 修改step方法
+    # 重构后的step方法，基于极化三角框架
     def step(self):
-        # 首先，应用原始意见更新
-        self.opinions, rule_counts = update_opinions(
-            self.opinions,
-            self.adj_matrix,
-            self.config.influence_factor,
-            self.config.p_radical_high,
-            self.config.p_radical_low,
-            self.config.p_conv_high,
-            self.config.p_conv_low,
-            self.identities,
-            self.morals
-        )
+        """
+        执行一步模拟，更新所有代理的意见
+        基于极化三角框架的动力学方程实现
+        """
+        # 初始化规则计数 (为了与原有代码兼容，虽然本方法不再使用规则)
+        rule_counts = np.zeros(16, dtype=np.int32)
         
-        # 存储规则计数
-        self.rule_counts_history.append(rule_counts)
-
-        # 然后，应用身份影响
-        self.identity_influence_step()
-
-
-@njit
-def update_opinions(opinions, adj_matrix, influence_factor, p_radical_high, p_radical_low, p_conv_high, p_conv_low,
-                    identities, morals):
-    n = opinions.shape[0]
-    # 初始化规则计数器 - 从8种规则扩展到16种规则
-    rule_counts = np.zeros(16, dtype=np.int32)
-    
-    # 新的概率参数
-    # 收敛概率参数(convergence)
-    p_conv_vhigh = 0.9  # 非常高的收敛概率
-    p_conv_high = 0.7   # 高收敛概率，保持原值
-    p_conv_mid = 0.5    # 中等收敛概率
-    p_conv_low = 0.3    # 低收敛概率，保持原值
-
-    # 拉动概率参数(pulling)
-    p_pull_high = 0.8   # 高拉动概率
-    p_pull_mid = 0.6    # 中等拉动概率
-    p_pull_low = 0.4    # 低拉动概率
-
-    # 极化概率参数(polarization)
-    p_polar_vhigh = 0.9  # 非常高的极化概率
-    p_polar_high = 0.7   # 高极化概率
-    p_polar_mid = 0.5    # 中等极化概率
-    p_polar_low = 0.3    # 低极化概率
-    
-    # 抵抗概率参数(resistance)
-    p_resist_high = 0.8  # 高抵抗概率
-    p_resist_low = 0.4   # 低抵抗概率
-    
-    for i in range(n):
-        count = 0
-        neighbor = -1
-        for j in range(n):
-            if adj_matrix[i, j] == 1:
-                count += 1
-                if np.random.rand() < 1.0 / count:
-                    neighbor = j
-        if neighbor == -1:
-            continue
+        # 计算每个agent的意见变化
+        opinion_changes = np.zeros(self.num_agents)
+        
+        for i in range(self.num_agents):
+            # 计算自我感知
+            sigma_ii = np.sign(self.opinions[i]) if self.opinions[i] != 0 else 0
             
-        o_i = opinions[i]
-        o_j = opinions[neighbor]
-        m_i = morals[i]
-        m_j = morals[neighbor]  # 获取邻居的道德状态
-
-        if m_i == 1:
-            o_j = o_j/(abs(o_j))
-
-        same_dir = ((o_i > 0 and o_j > 0) or (o_i < 0 and o_j < 0))
-        same_id = (identities[i] == identities[neighbor])
+            # 计算邻居影响总和
+            neighbor_influence = 0
+            for j in range(self.num_agents):
+                if i != j:  # 排除自己
+                    A_ij = self.calculate_relationship_coefficient(i, j)
+                    sigma_ij = self.calculate_perceived_opinion(i, j)
+                    neighbor_influence += A_ij * sigma_ij
+            
+            # 计算意见变化率
+            # 回归中性意见项
+            regression_term = -self.delta * self.opinions[i]
+            
+            # 意见激活项
+            activation_term = self.u[i] * np.tanh(
+                self.alpha[i] * sigma_ii + 
+                (self.beta / (1 + self.gamma[i] * self.morals[i])) * neighbor_influence
+            )
+            
+            # 总变化
+            opinion_changes[i] = regression_term + activation_term
         
-        # 极化阻力因子，使接近极端值更困难
-        resistance = 1 - (abs(o_i) ** 3)  # 在极端值处阻力最大
+        # 应用意见变化，使用小步长避免过大变化
+        step_size = self.config.influence_factor  # 使用配置中的影响因子作为步长
+        self.opinions += step_size * opinion_changes
         
-        # 同方向意见
-        if same_dir:
-            # 规则1-8：意见同向，不同身份关系和道德状态组合
-            if same_id:  # 身份相同
-                if m_i == 0 and m_j == 0:  # {0,0}
-                    # 规则1：意见同向，身份相同，双方不道德化，高度收敛
-                    if np.random.rand() < p_conv_high:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[0] += 1
-                elif m_i == 0 and m_j == 1:  # {0,1}
-                    # 规则2：意见同向，身份相同，自己不道德化对方道德化，中度被拉向极端
-                    if np.random.rand() < p_pull_mid:
-                        if o_j > 0:
-                            o_i = o_i + influence_factor * (o_j + 0.2 * (1 - o_j)) - o_i
-                        else:
-                            o_i = o_i + influence_factor * (o_j - 0.2 * (1 + o_j)) - o_i
-                        rule_counts[1] += 1
-                elif m_i == 1 and m_j == 0:  # {1,0}
-                    # 规则3：意见同向，身份相同，自己道德化对方不道德化，中度拉他向极端
-                    if np.random.rand() < p_pull_mid:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * (1 + o_i) * resistance
-                        rule_counts[2] += 1
-                else:  # m_i == 1 and m_j == 1, {1,1}
-                    # 规则4：意见同向，身份相同，双方道德化，高度极化
-                    if np.random.rand() < p_polar_high:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * (1 + o_i) * resistance
-                        rule_counts[3] += 1
-            else:  # 身份不同
-                if m_i == 0 and m_j == 0:  # {0,0}
-                    # 规则5：意见同向，身份不同，双方不道德化，中度收敛
-                    if np.random.rand() < p_conv_mid:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[4] += 1
-                elif m_i == 0 and m_j == 1:  # {0,1}
-                    # 规则6：意见同向，身份不同，自己不道德化对方道德化，低度被拉向极端
-                    if np.random.rand() < p_pull_low:
-                        if o_j > 0:
-                            o_i = o_i + influence_factor * (o_j + 0.1 * (1 - o_j)) - o_i
-                        else:
-                            o_i = o_i + influence_factor * (o_j - 0.1 * (1 + o_j)) - o_i
-                        rule_counts[5] += 1
-                elif m_i == 1 and m_j == 0:  # {1,0}
-                    # 规则7：意见同向，身份不同，自己道德化对方不道德化，低度拉他向极端
-                    if np.random.rand() < p_pull_low:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * 0.7 * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * 0.7 * (1 + o_i) * resistance
-                        rule_counts[6] += 1
-                else:  # m_i == 1 and m_j == 1, {1,1}
-                    # 规则8：意见同向，身份不同，双方道德化，中度极化
-                    if np.random.rand() < p_polar_mid:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * 0.8 * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * 0.8 * (1 + o_i) * resistance
-                        rule_counts[7] += 1
-        else:  # 不同方向意见
-            # 规则9-16：意见不同向，不同身份关系和道德状态组合
-            if same_id:  # 身份相同
-                if m_i == 0 and m_j == 0:  # {0,0}
-                    # 规则9：意见不同向，身份相同，双方不道德化，非常高收敛
-                    if np.random.rand() < p_conv_vhigh:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[8] += 1
-                elif m_i == 0 and m_j == 1:  # {0,1}
-                    # 规则10：意见不同向，身份相同，自己不道德化对方道德化，中度收敛或被拉向他方
-                    if np.random.rand() < p_conv_mid:
-                        o_i = o_i + influence_factor * 1.2 * (o_j - o_i)
-                        rule_counts[9] += 1
-                elif m_i == 1 and m_j == 0:  # {1,0}
-                    # 规则11：意见不同向，身份相同，自己道德化对方不道德化，低度抵抗并持守立场
-                    if np.random.rand() < p_resist_low:
-                        o_i = o_i + influence_factor * 0.5 * (abs(o_j)/o_j - o_i)
-                        rule_counts[10] += 1
-                else:  # m_i == 1 and m_j == 1, {1,1}
-                    # 规则12：意见不同向，身份相同，双方道德化，低度双方极化
-                    if np.random.rand() < p_polar_low:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * 0.6 * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * 0.6 * (1 + o_i) * resistance
-                        rule_counts[11] += 1
-            else:  # 身份不同
-                if m_i == 0 and m_j == 0:  # {0,0}
-                    # 规则13：意见不同向，身份不同，双方不道德化，低度收敛
-                    if np.random.rand() < p_conv_low:
-                        o_i = o_i + influence_factor * (o_j - o_i)
-                        rule_counts[12] += 1
-                elif m_i == 0 and m_j == 1:  # {0,1}
-                    # 规则14：意见不同向，身份不同，自己不道德化对方道德化，高度被拉向他方
-                    if np.random.rand() < p_pull_high:
-                        o_i = o_i + influence_factor * 1.5 * (o_j - o_i)
-                        rule_counts[13] += 1
-                elif m_i == 1 and m_j == 0:  # {1,0}
-                    # 规则15：意见不同向，身份不同，自己道德化对方不道德化，高度抵抗并走向极端
-                    if np.random.rand() < p_resist_high:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * 1.2 * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * 1.2 * (1 + o_i) * resistance
-                        rule_counts[14] += 1
-                else:  # m_i == 1 and m_j == 1, {1,1}
-                    # 规则16：意见不同向，身份不同，双方道德化，极高度双方极化
-                    if np.random.rand() < p_polar_vhigh:
-                        if o_i > 0:
-                            o_i = o_i + influence_factor * 1.5 * (1 - o_i) * resistance
-                        else:
-                            o_i = o_i - influence_factor * 1.5 * (1 + o_i) * resistance
-                        rule_counts[15] += 1
-                            
-        # 确保意见值在-1到1之间
-        if o_i > 1:
-            o_i = 1
-        elif o_i < -1:
-            o_i = -1
-        opinions[i] = o_i
-    return opinions, rule_counts
+        # 确保意见值在[-1, 1]范围内
+        self.opinions = np.clip(self.opinions, -1, 1)
+        
+        # 为了与原有代码兼容，存储规则计数
+        self.rule_counts_history.append(rule_counts)

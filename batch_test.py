@@ -62,7 +62,7 @@ def batch_test():
         for mor_mode in ["random", "clustered"]:
             for op_mode in ["random", "clustered"]:
                 for op_dist in ["uniform", "single_peak", "twin_peak"]:
-                    for mor_rate in [0.25, 0.5, 0.75]:  # 使用三个不同的道德化率
+                    for mor_rate in [0.75, 0.5, 0.25]:  # 使用三个不同的道德化率
                         folder_name = f"ID_{id_mode}_M_{mor_mode}_OP_{op_mode}_op_{op_dist}_mor_{mor_rate:.1f}"
                         folder_path = os.path.join(base_dir, folder_name)
                         if not os.path.exists(folder_path):
