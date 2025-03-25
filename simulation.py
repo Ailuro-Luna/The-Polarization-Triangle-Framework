@@ -80,12 +80,12 @@ class Simulation:
         self.morals = np.empty(self.num_agents, dtype=np.int32)
         self.identities = np.empty(self.num_agents, dtype=np.int32)
 
-        # 添加新的模型参数
-        self.delta = 0.1  # 意见衰减率
-        self.u = np.ones(self.num_agents) * 0.1  # 意见激活系数
-        self.alpha = np.ones(self.num_agents) * 0.5  # 自我激活系数
-        self.beta = 0.5  # 社会影响系数
-        self.gamma = np.ones(self.num_agents) * 0.5  # 道德化影响系数
+        # 从配置中获取模型参数
+        self.delta = config.delta  # 意见衰减率
+        self.u = np.ones(self.num_agents) * config.u  # 意见激活系数
+        self.alpha = np.ones(self.num_agents) * config.alpha  # 自我激活系数
+        self.beta = config.beta  # 社会影响系数
+        self.gamma = np.ones(self.num_agents) * config.gamma  # 道德化影响系数
         
         self._init_identities()
         self._init_morality()

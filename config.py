@@ -41,6 +41,13 @@ class SimulationConfig:
     
     # 身份规范强度参数
     identity_antagonism_threshold: float = 0.8  # 小于1的常数参数A，定义对抗阈值
+    
+    # 极化三角框架模型参数
+    delta: float = 0.2  # 意见衰减率
+    u: float = 0.2  # 意见激活系数
+    alpha: float = 0.25  # 自我激活系数
+    beta: float = 0.25  # 社会影响系数
+    gamma: float = 1  # 道德化影响系数
 
 # 各种预设配置：
 default_config = SimulationConfig()
@@ -51,6 +58,12 @@ high_polarization_config = SimulationConfig(
     coupling="strong",
     moral_correlation="strong",
     morality_rate=0.8,  # 高道德化率
+    # 极化三角框架模型参数
+    delta=0.05,  # 较低的衰减率
+    u=0.15,      # 较高的激活系数
+    alpha=0.3,   # 较高的自我激活
+    beta=0.35,   # 较高的社会影响
+    gamma=0.7,   # 较高的道德化影响
 )
 
 low_polarization_config = SimulationConfig(
@@ -59,6 +72,12 @@ low_polarization_config = SimulationConfig(
     coupling="none",
     moral_correlation="none",
     morality_rate=0.2,  # 低道德化率
+    # 极化三角框架模型参数
+    delta=0.2,   # 较高的衰减率
+    u=0.05,      # 较低的激活系数
+    alpha=0.15,  # 较低的自我激活
+    beta=0.15,   # 较低的社会影响
+    gamma=0.3,   # 较低的道德化影响
 )
 
 random_config = SimulationConfig(
@@ -127,6 +146,7 @@ lfr_config = SimulationConfig(
     cluster_opinion=True,
     cluster_opinion_prob=0.8,
     morality_rate=0.5,  # 中等道德化率
+    # 极化三角框架模型参数保持默认值
 )
 
 # 默认使用的配置
