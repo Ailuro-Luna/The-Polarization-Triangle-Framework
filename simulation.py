@@ -90,6 +90,14 @@ class Simulation:
         self._init_identities()
         self._init_morality()
         self._init_opinions()
+        
+        # 存储每个agent的邻居列表
+        self.neighbors_list = [[] for _ in range(self.num_agents)]
+        # 存储每个agent的同身份邻居列表
+        self.same_identity_neighbors_list = [[] for _ in range(self.num_agents)]
+        
+        # 初始化邻居列表
+        self._init_neighbors_lists()
 
     def _create_network(self):
         params = self.config.network_params
@@ -315,19 +323,12 @@ class Simulation:
         返回:
         同身份邻居的平均感知意见值，如果没有同身份邻居则返回0
         """
-        l_i = self.identities[i]
         same_identity_sigmas = []
         
-        # 遍历所有可能的邻居
-        for j in range(self.num_agents):
-            # 排除自己
-            if i == j:
-                continue
-                
-            # 检查是否为邻居且身份相同
-            if self.adj_matrix[i, j] > 0 and self.identities[j] == l_i:
-                sigma_ij = self.calculate_perceived_opinion(i, j)
-                same_identity_sigmas.append(sigma_ij)
+        # 直接使用预先计算的同身份邻居列表
+        for j in self.same_identity_neighbors_list[i]:
+            sigma_ij = self.calculate_perceived_opinion(i, j)
+            same_identity_sigmas.append(sigma_ij)
         
         # 计算平均值
         if same_identity_sigmas:
@@ -335,6 +336,20 @@ class Simulation:
         else:
             # 如果没有同身份邻居，返回一个默认值
             return 0
+
+    def _init_neighbors_lists(self):
+        """初始化每个agent的邻居列表和同身份邻居列表"""
+        for i in range(self.num_agents):
+            # 获取邻居列表
+            for j in range(self.num_agents):
+                if i != j and self.adj_matrix[i, j] > 0:
+                    self.neighbors_list[i].append(j)
+                    
+            # 获取同身份邻居列表
+            l_i = self.identities[i]
+            for j in self.neighbors_list[i]:
+                if self.identities[j] == l_i:
+                    self.same_identity_neighbors_list[i].append(j)
 
     # 重构后的step方法，基于极化三角框架
     def step(self):
@@ -354,11 +369,12 @@ class Simulation:
             
             # 计算邻居影响总和
             neighbor_influence = 0
-            for j in range(self.num_agents):
-                if i != j:  # 排除自己
-                    A_ij = self.calculate_relationship_coefficient(i, j)
-                    sigma_ij = self.calculate_perceived_opinion(i, j)
-                    neighbor_influence += A_ij * sigma_ij
+            
+            # 使用预先计算的邻居列表
+            for j in self.neighbors_list[i]:
+                A_ij = self.calculate_relationship_coefficient(i, j)
+                sigma_ij = self.calculate_perceived_opinion(i, j)
+                neighbor_influence += A_ij * sigma_ij
             
             # 计算意见变化率
             # 回归中性意见项
