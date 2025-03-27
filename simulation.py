@@ -98,6 +98,14 @@ class Simulation:
         
         # 初始化邻居列表
         self._init_neighbors_lists()
+        
+        # 初始化用于监控自我激活和社会影响的数组
+        self.self_activation = np.zeros(self.num_agents, dtype=np.float64)
+        self.social_influence = np.zeros(self.num_agents, dtype=np.float64)
+        
+        # 存储历史数据
+        self.self_activation_history = []
+        self.social_influence_history = []
 
     def _create_network(self):
         params = self.config.network_params
@@ -363,6 +371,10 @@ class Simulation:
         # 计算每个agent的意见变化
         opinion_changes = np.zeros(self.num_agents)
         
+        # 重置自我激活和社会影响的值
+        self.self_activation = np.zeros(self.num_agents, dtype=np.float64)
+        self.social_influence = np.zeros(self.num_agents, dtype=np.float64)
+        
         for i in range(self.num_agents):
             # 计算自我感知
             sigma_ii = np.sign(self.opinions[i]) if self.opinions[i] != 0 else 0
@@ -376,14 +388,19 @@ class Simulation:
                 sigma_ij = self.calculate_perceived_opinion(i, j)
                 neighbor_influence += A_ij * sigma_ij
             
+            # 计算并存储自我激活项
+            self.self_activation[i] = self.alpha[i] * sigma_ii
+            
+            # 计算并存储社会影响项
+            self.social_influence[i] = (self.beta / (1 + self.gamma[i] * self.morals[i])) * neighbor_influence
+            
             # 计算意见变化率
             # 回归中性意见项
             regression_term = -self.delta * self.opinions[i]
             
             # 意见激活项
             activation_term = self.u[i] * np.tanh(
-                self.alpha[i] * sigma_ii + 
-                (self.beta / (1 + self.gamma[i] * self.morals[i])) * neighbor_influence
+                self.self_activation[i] + self.social_influence[i]
             )
             
             # 总变化
@@ -398,3 +415,53 @@ class Simulation:
         
         # 为了与原有代码兼容，存储规则计数
         self.rule_counts_history.append(rule_counts)
+        
+        # 存储自我激活和社会影响的历史数据
+        self.self_activation_history.append(self.self_activation.copy())
+        self.social_influence_history.append(self.social_influence.copy())
+    
+    def get_activation_components(self):
+        """
+        获取最近一步中的自我激活和社会影响组件
+        
+        返回:
+        字典，包含自我激活和社会影响的数组
+        """
+        return {
+            "self_activation": self.self_activation,
+            "social_influence": self.social_influence
+        }
+    
+    def get_activation_history(self):
+        """
+        获取所有历史步骤的自我激活和社会影响组件
+        
+        返回:
+        字典，包含自我激活和社会影响的历史数据列表
+        """
+        return {
+            "self_activation_history": self.self_activation_history,
+            "social_influence_history": self.social_influence_history
+        }
+        
+    def get_agent_activation_details(self, agent_id):
+        """
+        获取特定代理的自我激活和社会影响详情
+        
+        参数:
+        agent_id -- 代理的ID
+        
+        返回:
+        字典，包含该代理的自我激活和社会影响值
+        """
+        if 0 <= agent_id < self.num_agents:
+            return {
+                "self_activation": self.self_activation[agent_id],
+                "social_influence": self.social_influence[agent_id],
+                "total_activation": self.self_activation[agent_id] + self.social_influence[agent_id],
+                "opinion": self.opinions[agent_id],
+                "morality": self.morals[agent_id],
+                "identity": self.identities[agent_id]
+            }
+        else:
+            return None

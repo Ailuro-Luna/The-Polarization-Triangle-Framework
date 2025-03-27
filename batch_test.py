@@ -4,6 +4,7 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from simulation import Simulation
+from config import SimulationConfig
 from config import lfr_config
 from visualization import draw_network
 from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory
@@ -12,7 +13,11 @@ from visualization import (
     draw_opinion_distribution, 
     draw_opinion_distribution_heatmap,
     draw_rule_usage,
-    draw_rule_cumulative_usage
+    draw_rule_cumulative_usage,
+    draw_activation_components,
+    draw_activation_history,
+    draw_activation_heatmap,
+    draw_activation_trajectory
 )
 
 
@@ -172,6 +177,55 @@ def batch_test():
                                 f.write(f"{rule_name}: {count} 次 ({percent:.1f}%)\n")
                             f.write("-" * 50 + "\n")
                             f.write(f"总计: {total_count} 次\n")
+                        
+                        # 创建激活组件子文件夹
+                        activation_folder = os.path.join(folder_path, "activation_components")
+                        if not os.path.exists(activation_folder):
+                            os.makedirs(activation_folder)
+                        
+                        # 绘制自我激活和社会影响组件可视化
+                        # 1. 自我激活和社会影响散点图
+                        components_path = os.path.join(activation_folder, "activation_components.png")
+                        draw_activation_components(
+                            sim,
+                            f"Activation Components\nConfig: {folder_name}",
+                            components_path
+                        )
+                        
+                        # 2. 自我激活和社会影响随时间的变化
+                        history_path = os.path.join(activation_folder, "activation_history.png")
+                        draw_activation_history(
+                            sim,
+                            f"Activation History\nConfig: {folder_name}",
+                            history_path
+                        )
+                        
+                        # 3. 自我激活和社会影响的热力图
+                        heatmap_path = os.path.join(activation_folder, "activation_heatmap.png")
+                        draw_activation_heatmap(
+                            sim,
+                            f"Activation Heatmap\nConfig: {folder_name}",
+                            heatmap_path
+                        )
+                        
+                        # 4. 选定agent的激活轨迹
+                        trajectory_path = os.path.join(activation_folder, "activation_trajectory.png")
+                        draw_activation_trajectory(
+                            sim,
+                            trajectory,
+                            f"Activation Trajectories\nConfig: {folder_name}",
+                            trajectory_path
+                        )
+                        
+                        # 5. 保存激活组件数据到CSV文件
+                        components = sim.get_activation_components()
+                        data_path = os.path.join(activation_folder, "activation_data.csv")
+                        with open(data_path, "w") as f:
+                            f.write("agent_id,identity,morality,opinion,self_activation,social_influence,total_activation\n")
+                            for i in range(sim.num_agents):
+                                f.write(f"{i},{sim.identities[i]},{sim.morals[i]},{sim.opinions[i]:.4f}")
+                                f.write(f",{components['self_activation'][i]:.4f},{components['social_influence'][i]:.4f}")
+                                f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
 
 
 def batch_test_morality_rates():
@@ -337,6 +391,39 @@ def batch_test_model_params():
         end_distribution_path = os.path.join(folder_path, "opinion_distribution.png")
         draw_opinion_distribution(sim, f"Ending Opinion Distribution\nParams: {param_set['name']}", end_distribution_path)
         
+        # 添加：绘制自我激活和社会影响组件
+        activation_components_path = os.path.join(folder_path, "activation_components.png")
+        draw_activation_components(
+            sim, 
+            f"Activation Components\nParams: {param_set['name']}", 
+            activation_components_path
+        )
+        
+        # 添加：绘制自我激活和社会影响的历史变化
+        activation_history_path = os.path.join(folder_path, "activation_history.png")
+        draw_activation_history(
+            sim, 
+            f"Activation Components History\nParams: {param_set['name']}", 
+            activation_history_path
+        )
+        
+        # 添加：绘制自我激活和社会影响的热力图
+        activation_heatmap_path = os.path.join(folder_path, "activation_heatmap.png")
+        draw_activation_heatmap(
+            sim, 
+            f"Activation Components Heatmap\nParams: {param_set['name']}", 
+            activation_heatmap_path
+        )
+        
+        # 添加：绘制自我激活和社会影响的轨迹图
+        activation_trajectory_path = os.path.join(folder_path, "activation_trajectory.png")
+        draw_activation_trajectory(
+            sim,
+            trajectory,
+            f"Activation Components Trajectories\nParams: {param_set['name']}",
+            activation_trajectory_path
+        )
+        
         # 输出模型参数到文件
         params_path = os.path.join(folder_path, "model_params.txt")
         with open(params_path, "w") as f:
@@ -353,9 +440,261 @@ def batch_test_model_params():
             f.write(f"节点数量: {params.num_agents}\n")
             f.write(f"道德化率: {params.morality_rate}\n")
             f.write(f"意见分布: {params.opinion_distribution}\n")
+            
+        # 输出自我激活和社会影响数据到CSV文件
+        components = sim.get_activation_components()
+        data_path = os.path.join(folder_path, "activation_components_data.csv")
+        with open(data_path, "w") as f:
+            f.write("agent_id,identity,morality,opinion,self_activation,social_influence,total_activation\n")
+            for i in range(sim.num_agents):
+                f.write(f"{i},{sim.identities[i]},{sim.morals[i]},{sim.opinions[i]:.4f}")
+                f.write(f",{components['self_activation'][i]:.4f},{components['social_influence'][i]:.4f}")
+                f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
 
+
+# 添加新的测试函数，专门用于分析自我激活和社会影响
+def analyze_activation_components():
+    """分析不同设置下的自我激活和社会影响组件"""
+    base_dir = "activation_analysis"
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+    
+    # 测试不同的道德化率
+    morality_rates = [0.0, 0.3, 0.5, 0.7, 1.0]
+    
+    # 基本配置
+    base_params = copy.deepcopy(lfr_config)
+    base_params.num_agents = 500  # 减少代理数量以加快测试
+    
+    steps = 500  # 模拟步数
+    
+    # 为每个道德化率创建单独的文件夹
+    for mor_rate in morality_rates:
+        folder_name = f"morality_rate_{mor_rate:.1f}"
+        folder_path = os.path.join(base_dir, folder_name)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        
+        print(f"Analyzing morality rate: {mor_rate}")
+        
+        # 设置道德化率
+        params = copy.deepcopy(base_params)
+        params.morality_rate = mor_rate
+        
+        # 运行模拟
+        sim = Simulation(params)
+        
+        # 运行模拟并记录轨迹
+        trajectory = run_simulation_with_trajectory(sim, steps=steps)
+        
+        # 绘制自我激活和社会影响组件
+        components_path = os.path.join(folder_path, "activation_components.png")
+        draw_activation_components(
+            sim,
+            f"Activation Components (Morality Rate: {mor_rate:.1f})",
+            components_path
+        )
+        
+        # 绘制历史变化
+        history_path = os.path.join(folder_path, "activation_history.png")
+        draw_activation_history(
+            sim,
+            f"Activation History (Morality Rate: {mor_rate:.1f})",
+            history_path
+        )
+        
+        # 绘制热力图
+        heatmap_path = os.path.join(folder_path, "activation_heatmap.png")
+        draw_activation_heatmap(
+            sim,
+            f"Activation Heatmap (Morality Rate: {mor_rate:.1f})",
+            heatmap_path
+        )
+        
+        # 绘制轨迹图
+        trajectory_path = os.path.join(folder_path, "activation_trajectory.png")
+        draw_activation_trajectory(
+            sim,
+            trajectory,
+            f"Activation Trajectories (Morality Rate: {mor_rate:.1f})",
+            trajectory_path
+        )
+        
+        # 保存基本的模拟结果
+        opinion_path = os.path.join(folder_path, "final_opinion.png")
+        draw_network(
+            sim,
+            "opinion",
+            f"Final Opinion Network (Morality Rate: {mor_rate:.1f})",
+            opinion_path
+        )
+        
+        # 保存道德化分布
+        morality_path = os.path.join(folder_path, "morality.png")
+        draw_network(
+            sim,
+            "morality",
+            f"Morality Distribution (Morality Rate: {mor_rate:.1f})",
+            morality_path
+        )
+        
+        # 输出激活组件数据到CSV
+        components = sim.get_activation_components()
+        data_path = os.path.join(folder_path, "activation_data.csv")
+        with open(data_path, "w") as f:
+            f.write("agent_id,identity,morality,opinion,self_activation,social_influence,total_activation\n")
+            for i in range(sim.num_agents):
+                f.write(f"{i},{sim.identities[i]},{sim.morals[i]},{sim.opinions[i]:.4f}")
+                f.write(f",{components['self_activation'][i]:.4f},{components['social_influence'][i]:.4f}")
+                f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
+    
+    # 绘制所有道德化率的比较图
+    compare_morality_activation(morality_rates, base_dir)
+
+def compare_morality_activation(morality_rates, base_dir):
+    """
+    绘制不同道德化率下自我激活和社会影响的比较图
+    
+    参数:
+    morality_rates -- 道德化率列表
+    base_dir -- 基础目录
+    """
+    # 创建保存比较图的目录
+    comparison_dir = os.path.join(base_dir, "comparison")
+    if not os.path.exists(comparison_dir):
+        os.makedirs(comparison_dir)
+    
+    # 分别存储每个道德化率下的数据
+    all_data = {}
+    
+    for mor_rate in morality_rates:
+        folder_path = os.path.join(base_dir, f"morality_rate_{mor_rate:.1f}")
+        csv_path = os.path.join(folder_path, "activation_data.csv")
+        
+        # 读取CSV数据
+        data = np.genfromtxt(csv_path, delimiter=',', names=True, dtype=None, encoding=None)
+        all_data[mor_rate] = data
+    
+    # 创建比较图
+    plt.figure(figsize=(16, 12))
+    
+    # 1. 不同道德化率下的自我激活分布
+    plt.subplot(2, 2, 1)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.hist(data['self_activation'], bins=20, alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Self Activation')
+    plt.ylabel('Count')
+    plt.title('Self Activation Distribution Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 2. 不同道德化率下的社会影响分布
+    plt.subplot(2, 2, 2)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.hist(data['social_influence'], bins=20, alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Social Influence')
+    plt.ylabel('Count')
+    plt.title('Social Influence Distribution Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 3. 不同道德化率下的总激活分布
+    plt.subplot(2, 2, 3)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.hist(data['total_activation'], bins=20, alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Total Activation')
+    plt.ylabel('Count')
+    plt.title('Total Activation Distribution Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 4. 不同道德化率下的意见分布
+    plt.subplot(2, 2, 4)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.hist(data['opinion'], bins=20, alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Opinion')
+    plt.ylabel('Count')
+    plt.title('Opinion Distribution Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    plt.suptitle('Comparison of Activation Components Across Morality Rates')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    
+    # 保存比较图
+    comparison_path = os.path.join(comparison_dir, "activation_distribution_comparison.png")
+    plt.savefig(comparison_path)
+    plt.close()
+    
+    # 创建散点图比较
+    plt.figure(figsize=(16, 12))
+    
+    # 1. 自我激活 vs 意见
+    plt.subplot(2, 2, 1)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.scatter(data['opinion'], data['self_activation'], alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Opinion')
+    plt.ylabel('Self Activation')
+    plt.title('Self Activation vs Opinion Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 2. 社会影响 vs 意见
+    plt.subplot(2, 2, 2)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.scatter(data['opinion'], data['social_influence'], alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Opinion')
+    plt.ylabel('Social Influence')
+    plt.title('Social Influence vs Opinion Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 3. 总激活 vs 意见
+    plt.subplot(2, 2, 3)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.scatter(data['opinion'], data['total_activation'], alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Opinion')
+    plt.ylabel('Total Activation')
+    plt.title('Total Activation vs Opinion Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # 4. 自我激活 vs 社会影响
+    plt.subplot(2, 2, 4)
+    for mor_rate in morality_rates:
+        data = all_data[mor_rate]
+        plt.scatter(data['self_activation'], data['social_influence'], alpha=0.5, label=f"Rate={mor_rate:.1f}")
+    
+    plt.xlabel('Self Activation')
+    plt.ylabel('Social Influence')
+    plt.title('Self Activation vs Social Influence Across Morality Rates')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    plt.suptitle('Comparison of Activation Relationships Across Morality Rates')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    
+    # 保存散点图比较
+    scatter_path = os.path.join(comparison_dir, "activation_scatter_comparison.png")
+    plt.savefig(scatter_path)
+    plt.close()
 
 if __name__ == "__main__":
     batch_test()
-    batch_test_morality_rates()
-    batch_test_model_params()  # 添加新的模型参数测试
+    # batch_test_morality_rates()
+    # batch_test_model_params()
+    # analyze_activation_components()  # 运行新添加的分析函数
