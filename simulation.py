@@ -292,6 +292,9 @@ class Simulation:
         self.self_activation_history = []
         self.social_influence_history = []
         
+        # 添加轨迹存储
+        self.opinion_trajectory = []
+        
         # 优化用的数据结构(CSR格式)
         self._create_csr_neighbors()
 
@@ -526,6 +529,9 @@ class Simulation:
         # 初始化规则计数 (为了与原有代码兼容，虽然本方法不再使用规则)
         rule_counts = np.zeros(16, dtype=np.int32)
         
+        # 记录当前意见到轨迹
+        self.opinion_trajectory.append(self.opinions.copy())
+        
         # 使用numba加速的函数进行主要计算
         new_opinions, new_self_activation, new_social_influence = step_calculation(
             self.opinions,
@@ -598,4 +604,105 @@ class Simulation:
                 "identity": self.identities[agent_id]
             }
         else:
-            return None 
+            return None
+
+    def save_simulation_data(self, output_dir, prefix='sim_data'):
+        """
+        保存模拟数据到文件，便于后续进行统计分析
+        
+        参数:
+        output_dir -- 输出目录路径
+        prefix -- 文件名前缀
+        """
+        import os
+        import pandas as pd
+        import numpy as np
+        
+        # 创建目录（如果不存在）
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # 保存轨迹数据
+        trajectory_data = {
+            'step': [],
+            'agent_id': [],
+            'opinion': [],
+            'identity': [],
+            'morality': [],
+            'self_activation': [],
+            'social_influence': []
+        }
+        
+        # 获取完整历史
+        activation_history = self.get_activation_history()
+        
+        # 如果存在历史数据
+        if self.self_activation_history:
+            # 为每一步、每个agent添加数据
+            for step in range(len(self.self_activation_history)):
+                for agent_id in range(self.num_agents):
+                    trajectory_data['step'].append(step)
+                    trajectory_data['agent_id'].append(agent_id)
+                    # 对于opinion需要从trajectory中获取，如果没有则用当前值
+                    if hasattr(self, 'opinion_trajectory') and step < len(self.opinion_trajectory):
+                        trajectory_data['opinion'].append(self.opinion_trajectory[step][agent_id])
+                    else:
+                        trajectory_data['opinion'].append(self.opinions[agent_id])
+                    
+                    trajectory_data['identity'].append(self.identities[agent_id])
+                    trajectory_data['morality'].append(self.morals[agent_id])
+                    trajectory_data['self_activation'].append(activation_history['self_activation_history'][step][agent_id])
+                    trajectory_data['social_influence'].append(activation_history['social_influence_history'][step][agent_id])
+        
+        # 将数据转换为DataFrame并保存为CSV
+        df = pd.DataFrame(trajectory_data)
+        trajectory_csv_path = os.path.join(output_dir, f"{prefix}_trajectory.csv")
+        df.to_csv(trajectory_csv_path, index=False)
+        
+        # 保存最终状态数据
+        final_state = {
+            'agent_id': list(range(self.num_agents)),
+            'opinion': self.opinions.tolist(),
+            'identity': self.identities.tolist(),
+            'morality': self.morals.tolist(),
+            'self_activation': self.self_activation.tolist(),
+            'social_influence': self.social_influence.tolist()
+        }
+        
+        df_final = pd.DataFrame(final_state)
+        final_csv_path = os.path.join(output_dir, f"{prefix}_final_state.csv")
+        df_final.to_csv(final_csv_path, index=False)
+        
+        # 保存网络结构
+        network_data = []
+        for i in range(self.num_agents):
+            for j in range(i+1, self.num_agents):  # 只保存上三角矩阵避免重复
+                if self.adj_matrix[i, j] > 0:
+                    network_data.append({
+                        'source': i,
+                        'target': j,
+                        'weight': self.adj_matrix[i, j]
+                    })
+        
+        df_network = pd.DataFrame(network_data)
+        network_csv_path = os.path.join(output_dir, f"{prefix}_network.csv")
+        df_network.to_csv(network_csv_path, index=False)
+        
+        # 保存模拟配置
+        config_dict = vars(self.config)
+        config_data = []
+        for key, value in config_dict.items():
+            # 跳过无法序列化的复杂对象
+            if isinstance(value, (int, float, str, bool)) or value is None:
+                config_data.append({'parameter': key, 'value': value})
+        
+        df_config = pd.DataFrame(config_data)
+        config_csv_path = os.path.join(output_dir, f"{prefix}_config.csv")
+        df_config.to_csv(config_csv_path, index=False)
+        
+        return {
+            'trajectory': trajectory_csv_path,
+            'final_state': final_csv_path,
+            'network': network_csv_path,
+            'config': config_csv_path
+        } 

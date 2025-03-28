@@ -7,7 +7,7 @@ from simulation import Simulation
 from config import SimulationConfig
 from config import lfr_config
 from visualization import draw_network
-from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory
+from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory, save_trajectory_to_csv
 from visualization import (
     draw_network, 
     draw_opinion_distribution, 
@@ -93,6 +93,18 @@ def batch_test():
 
                         # 运行模拟并记录完整轨迹
                         trajectory = run_simulation_with_trajectory(sim, steps=100)
+                        
+                        # 保存轨迹数据到CSV
+                        data_folder = os.path.join(folder_path, "data")
+                        if not os.path.exists(data_folder):
+                            os.makedirs(data_folder)
+                        trajectory_csv = os.path.join(data_folder, f"{folder_name}_trajectory.csv")
+                        save_trajectory_to_csv(trajectory, trajectory_csv)
+                        print(f"Saved trajectory data to {trajectory_csv}")
+                        
+                        # 保存模拟数据到CSV文件，便于后续分析
+                        sim.save_simulation_data(data_folder, prefix=folder_name)
+                        print(f"Saved simulation data to {data_folder}")
 
                         # 添加：绘制规则使用统计图
                         rule_usage_path = os.path.join(folder_path, "rule_usage.png")
@@ -262,6 +274,11 @@ def batch_test_morality_rates():
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         
+        # 保存模拟数据
+        data_folder = os.path.join(folder_path, "data")
+        sim.save_simulation_data(data_folder, prefix=f"mor_rate_{mor_rate:.1f}")
+        print(f"Saved simulation data to {data_folder}")
+        
         # 绘制规则使用图
         rule_usage_path = os.path.join(folder_path, "rule_usage.png")
         draw_rule_usage(
@@ -368,6 +385,11 @@ def batch_test_model_params():
         
         # 运行模拟并记录完整轨迹
         trajectory = run_simulation_with_trajectory(sim, steps=steps)
+        
+        # 保存模拟数据
+        data_folder = os.path.join(folder_path, "data")
+        sim.save_simulation_data(data_folder, prefix=param_set['name'])
+        print(f"Saved simulation data to {data_folder}")
         
         # 绘制轨迹图
         trajectory_path = os.path.join(folder_path, "opinion_trajectory.png")
@@ -486,6 +508,11 @@ def analyze_activation_components():
         
         # 运行模拟并记录轨迹
         trajectory = run_simulation_with_trajectory(sim, steps=steps)
+        
+        # 保存模拟数据
+        data_folder = os.path.join(folder_path, "data")
+        sim.save_simulation_data(data_folder, prefix=f"morality_rate_{mor_rate:.1f}")
+        print(f"Saved simulation data to {data_folder}")
         
         # 绘制自我激活和社会影响组件
         components_path = os.path.join(folder_path, "activation_components.png")
