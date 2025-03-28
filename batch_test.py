@@ -92,7 +92,7 @@ def batch_test():
                                      start_opinion_path)
 
                         # 运行模拟并记录完整轨迹
-                        trajectory = run_simulation_with_trajectory(sim, steps=500)
+                        trajectory = run_simulation_with_trajectory(sim, steps=100)
 
                         # 添加：绘制规则使用统计图
                         rule_usage_path = os.path.join(folder_path, "rule_usage.png")

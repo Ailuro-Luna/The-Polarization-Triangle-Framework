@@ -43,8 +43,8 @@ class SimulationConfig:
     identity_antagonism_threshold: float = 0.8  # 小于1的常数参数A，定义对抗阈值
     
     # 极化三角框架模型参数
-    delta: float = 0.2  # 意见衰减率
-    u: float = 0.2  # 意见激活系数
+    delta: float = 1  # 意见衰减率
+    u: float = 1  # 意见激活系数
     alpha: float = 0.25  # 自我激活系数
     beta: float = 0.25  # 社会影响系数
     gamma: float = 1  # 道德化影响系数

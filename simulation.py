@@ -17,6 +17,73 @@ def sample_morality(morality_rate):
     """
     return 1 if np.random.rand() < morality_rate else 0
 
+
+@njit
+def calculate_perceived_opinion_func(opinions, morals, i, j):
+    """
+    计算agent i对agent j的意见的感知
+    
+    参数:
+    opinions -- 所有agent的意见数组
+    morals -- 所有agent的道德值数组
+    i -- 观察者agent的索引
+    j -- 被观察agent的索引
+    
+    返回:
+    感知意见值
+    """
+    z_j = opinions[j]
+    m_i = morals[i]
+    m_j = morals[j]
+    
+    if z_j == 0:
+        return 0
+    elif (m_i == 1 or m_j == 1):
+        return np.sign(z_j)  # 返回z_j的符号(1或-1)
+    else:
+        return z_j  # 返回实际值
+
+
+@njit
+def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opinions, i, j, same_identity_sigmas):
+    """
+    计算agent i与agent j之间的关系系数
+    
+    参数:
+    adj_matrix -- 邻接矩阵
+    identities -- 身份数组
+    morals -- 道德值数组
+    opinions -- 意见数组
+    i -- agent i的索引
+    j -- agent j的索引
+    same_identity_sigmas -- agent i的同身份邻居的感知意见值数组或平均值
+    
+    返回:
+    关系系数值
+    """
+    a_ij = adj_matrix[i, j]
+    if a_ij == 0:  # 如果不是邻居，关系系数为0
+        return 0
+        
+    l_i = identities[i]
+    l_j = identities[j]
+    m_i = morals[i]
+    m_j = morals[j]
+    
+    # 计算感知意见
+    sigma_ij = calculate_perceived_opinion_func(opinions, morals, i, j)
+    sigma_ji = calculate_perceived_opinion_func(opinions, morals, j, i)
+    
+    # 根据极化三角框架公式计算关系系数
+    if l_i != l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
+        return -a_ij
+    elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
+        # 使用传入的同身份平均感知意见值
+        return (a_ij / sigma_ji) * same_identity_sigmas
+    else:
+        return a_ij
+
+
 class Simulation:
     def __init__(self, config: SimulationConfig):
         self.config = config
@@ -276,16 +343,7 @@ class Simulation:
         返回:
         感知意见值，取值为-1, 0, 或1
         """
-        z_j = self.opinions[j]
-        m_i = self.morals[i]
-        m_j = self.morals[j]
-        
-        if z_j == 0:
-            return 0
-        elif (m_i == 1 or m_j == 1):
-            return np.sign(z_j)  # 返回z_j的符号(1或-1)
-        else:
-            return z_j  # 返回实际值
+        return calculate_perceived_opinion_func(self.opinions, self.morals, i, j)
 
     # 计算代理间关系系数
     def calculate_relationship_coefficient(self, i, j):
@@ -299,27 +357,17 @@ class Simulation:
         返回:
         关系系数值
         """
-        a_ij = self.adj_matrix[i, j]
-        if a_ij == 0:  # 如果不是邻居，关系系数为0
-            return 0
-            
-        l_i = self.identities[i]
-        l_j = self.identities[j]
-        m_i = self.morals[i]
-        m_j = self.morals[j]
+        # 计算同身份邻居的平均感知意见值
+        sigma_same_identity = self.calculate_same_identity_sigma(i)
         
-        sigma_ij = self.calculate_perceived_opinion(i, j)
-        sigma_ji = self.calculate_perceived_opinion(j, i)
-        
-        # 根据极化三角框架公式计算关系系数
-        if l_i != l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
-            return -a_ij
-        elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
-            # 计算tilde{sigma}_{sameIdentity} - agent i的同身份邻居的平均感知意见值
-            sigma_same_identity = self.calculate_same_identity_sigma(i)
-            return (a_ij / sigma_ji) * sigma_same_identity
-        else:
-            return a_ij
+        return calculate_relationship_coefficient_func(
+            self.adj_matrix, 
+            self.identities, 
+            self.morals, 
+            self.opinions, 
+            i, j, 
+            sigma_same_identity
+        )
 
     def calculate_same_identity_sigma(self, i):
         """
@@ -335,7 +383,7 @@ class Simulation:
         
         # 直接使用预先计算的同身份邻居列表
         for j in self.same_identity_neighbors_list[i]:
-            sigma_ij = self.calculate_perceived_opinion(i, j)
+            sigma_ij = calculate_perceived_opinion_func(self.opinions, self.morals, i, j)
             same_identity_sigmas.append(sigma_ij)
         
         # 计算平均值
@@ -384,8 +432,16 @@ class Simulation:
             
             # 使用预先计算的邻居列表
             for j in self.neighbors_list[i]:
-                A_ij = self.calculate_relationship_coefficient(i, j)
-                sigma_ij = self.calculate_perceived_opinion(i, j)
+                sigma_same_identity = self.calculate_same_identity_sigma(i)
+                A_ij = calculate_relationship_coefficient_func(
+                    self.adj_matrix, 
+                    self.identities, 
+                    self.morals, 
+                    self.opinions, 
+                    i, j, 
+                    sigma_same_identity
+                )
+                sigma_ij = calculate_perceived_opinion_func(self.opinions, self.morals, i, j)
                 neighbor_influence += A_ij * sigma_ij
             
             # 计算并存储自我激活项
