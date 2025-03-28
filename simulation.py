@@ -1,7 +1,7 @@
-# simulation.py
+# final_optimized_simulation.py
 import numpy as np
 import networkx as nx
-from numba import njit
+from numba import njit, int32, float64, prange, boolean
 from config import SimulationConfig
 
 
@@ -45,6 +45,40 @@ def calculate_perceived_opinion_func(opinions, morals, i, j):
 
 
 @njit
+def calculate_same_identity_sigma_func(opinions, morals, identities, neighbors_indices, neighbors_indptr, i):
+    """
+    计算agent i的同身份邻居的平均感知意见值（numba加速版本）
+    
+    参数:
+    opinions -- 所有agent的意见数组
+    morals -- 所有agent的道德值数组
+    identities -- 所有agent的身份数组
+    neighbors_indices -- CSR格式的邻居索引
+    neighbors_indptr -- CSR格式的邻居指针
+    i -- agent i的索引
+    
+    返回:
+    同身份邻居的平均感知意见值，如果没有同身份邻居则返回0
+    """
+    sigma_sum = 0.0
+    count = 0
+    l_i = identities[i]
+    
+    # 遍历i的所有邻居
+    for idx in range(neighbors_indptr[i], neighbors_indptr[i+1]):
+        j = neighbors_indices[idx]
+        # 如果是同身份的
+        if identities[j] == l_i:
+            sigma_sum += calculate_perceived_opinion_func(opinions, morals, i, j)
+            count += 1
+    
+    # 返回平均值，如果没有同身份邻居，则返回0
+    if count > 0:
+        return sigma_sum / count
+    return 0.0
+
+
+@njit
 def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opinions, i, j, same_identity_sigmas):
     """
     计算agent i与agent j之间的关系系数
@@ -79,9 +113,95 @@ def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opin
         return -a_ij
     elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
         # 使用传入的同身份平均感知意见值
+        if sigma_ji == 0:  # 避免除零错误
+            return a_ij
         return (a_ij / sigma_ji) * same_identity_sigmas
     else:
         return a_ij
+
+
+@njit
+def step_calculation(opinions, morals, identities, adj_matrix, 
+                    neighbors_indices, neighbors_indptr,  
+                    alpha, beta, gamma, delta, u, influence_factor):
+    """
+    执行一步模拟计算，使用numba加速
+    
+    参数:
+    opinions -- 代理意见数组
+    morals -- 代理道德值数组
+    identities -- 代理身份数组
+    adj_matrix -- 邻接矩阵
+    neighbors_indices -- CSR格式的邻居索引数组
+    neighbors_indptr -- CSR格式的邻居指针数组
+    alpha -- 自我激活系数
+    beta -- 社会影响系数
+    gamma -- 道德化影响系数
+    delta -- 意见衰减率
+    u -- 意见激活系数
+    influence_factor -- 影响因子
+    
+    返回:
+    更新后的opinions, self_activation, social_influence
+    """
+    num_agents = len(opinions)
+    opinion_changes = np.zeros(num_agents, dtype=np.float64)
+    self_activation = np.zeros(num_agents, dtype=np.float64)
+    social_influence = np.zeros(num_agents, dtype=np.float64)
+    
+    # 预计算所有agent的同身份邻居平均感知意见
+    same_identity_sigmas = np.zeros(num_agents, dtype=np.float64)
+    for i in range(num_agents):
+        same_identity_sigmas[i] = calculate_same_identity_sigma_func(
+            opinions, morals, identities, neighbors_indices, neighbors_indptr, i)
+    
+    for i in range(num_agents):
+        # 计算自我感知
+        sigma_ii = np.sign(opinions[i]) if opinions[i] != 0 else 0
+        
+        # 计算邻居影响总和
+        neighbor_influence = 0.0
+        
+        # 遍历i的所有邻居（使用CSR格式）
+        for idx in range(neighbors_indptr[i], neighbors_indptr[i+1]):
+            j = neighbors_indices[idx]
+            A_ij = calculate_relationship_coefficient_func(
+                adj_matrix, 
+                identities, 
+                morals, 
+                opinions, 
+                i, j, 
+                same_identity_sigmas[i]
+            )
+            sigma_ij = calculate_perceived_opinion_func(opinions, morals, i, j)
+            neighbor_influence += A_ij * sigma_ij
+        
+        # 计算并存储自我激活项
+        self_activation[i] = alpha[i] * sigma_ii
+        
+        # 计算并存储社会影响项
+        social_influence[i] = (beta / (1 + gamma[i] * morals[i])) * neighbor_influence
+        
+        # 计算意见变化率
+        # 回归中性意见项
+        regression_term = -delta * opinions[i]
+        
+        # 意见激活项
+        activation_term = u[i] * np.tanh(
+            self_activation[i] + social_influence[i]
+        )
+        
+        # 总变化
+        opinion_changes[i] = regression_term + activation_term
+    
+    # 应用意见变化，使用小步长避免过大变化
+    opinions_new = opinions.copy()
+    opinions_new += influence_factor * opinion_changes
+    
+    # 确保意见值在[-1, 1]范围内
+    opinions_new = np.clip(opinions_new, -1, 1)
+    
+    return opinions_new, self_activation, social_influence
 
 
 class Simulation:
@@ -160,8 +280,6 @@ class Simulation:
         
         # 存储每个agent的邻居列表
         self.neighbors_list = [[] for _ in range(self.num_agents)]
-        # 存储每个agent的同身份邻居列表
-        self.same_identity_neighbors_list = [[] for _ in range(self.num_agents)]
         
         # 初始化邻居列表
         self._init_neighbors_lists()
@@ -173,6 +291,25 @@ class Simulation:
         # 存储历史数据
         self.self_activation_history = []
         self.social_influence_history = []
+        
+        # 优化用的数据结构(CSR格式)
+        self._create_csr_neighbors()
+
+    def _create_csr_neighbors(self):
+        """
+        创建CSR格式的邻居表示
+        """
+        total_edges = sum(len(neighbors) for neighbors in self.neighbors_list)
+        self.neighbors_indices = np.zeros(total_edges, dtype=np.int32)
+        self.neighbors_indptr = np.zeros(self.num_agents + 1, dtype=np.int32)
+        
+        idx = 0
+        for i, neighbors in enumerate(self.neighbors_list):
+            self.neighbors_indptr[i] = idx
+            for j in neighbors:
+                self.neighbors_indices[idx] = j
+                idx += 1
+        self.neighbors_indptr[self.num_agents] = idx
 
     def _create_network(self):
         params = self.config.network_params
@@ -331,6 +468,14 @@ class Simulation:
         else:
             return np.random.uniform(-1, 1)
 
+    def _init_neighbors_lists(self):
+        """初始化每个agent的邻居列表"""
+        for i in range(self.num_agents):
+            # 获取邻居列表
+            for j in range(self.num_agents):
+                if i != j and self.adj_matrix[i, j] > 0:
+                    self.neighbors_list[i].append(j)
+
     # 基于极化三角框架的感知意见计算
     def calculate_perceived_opinion(self, i, j):
         """
@@ -358,7 +503,9 @@ class Simulation:
         关系系数值
         """
         # 计算同身份邻居的平均感知意见值
-        sigma_same_identity = self.calculate_same_identity_sigma(i)
+        sigma_same_identity = calculate_same_identity_sigma_func(
+            self.opinions, self.morals, self.identities, 
+            self.neighbors_indices, self.neighbors_indptr, i)
         
         return calculate_relationship_coefficient_func(
             self.adj_matrix, 
@@ -369,105 +516,36 @@ class Simulation:
             sigma_same_identity
         )
 
-    def calculate_same_identity_sigma(self, i):
-        """
-        计算agent i的同身份邻居的平均感知意见值
-        
-        参数:
-        i -- agent i的索引
-        
-        返回:
-        同身份邻居的平均感知意见值，如果没有同身份邻居则返回0
-        """
-        same_identity_sigmas = []
-        
-        # 直接使用预先计算的同身份邻居列表
-        for j in self.same_identity_neighbors_list[i]:
-            sigma_ij = calculate_perceived_opinion_func(self.opinions, self.morals, i, j)
-            same_identity_sigmas.append(sigma_ij)
-        
-        # 计算平均值
-        if same_identity_sigmas:
-            return np.mean(same_identity_sigmas)
-        else:
-            # 如果没有同身份邻居，返回一个默认值
-            return 0
-
-    def _init_neighbors_lists(self):
-        """初始化每个agent的邻居列表和同身份邻居列表"""
-        for i in range(self.num_agents):
-            # 获取邻居列表
-            for j in range(self.num_agents):
-                if i != j and self.adj_matrix[i, j] > 0:
-                    self.neighbors_list[i].append(j)
-                    
-            # 获取同身份邻居列表
-            l_i = self.identities[i]
-            for j in self.neighbors_list[i]:
-                if self.identities[j] == l_i:
-                    self.same_identity_neighbors_list[i].append(j)
-
-    # 重构后的step方法，基于极化三角框架
+    # 优化的step方法，基于极化三角框架
     def step(self):
         """
         执行一步模拟，更新所有代理的意见
         基于极化三角框架的动力学方程实现
+        使用numba加速的step_calculation函数
         """
         # 初始化规则计数 (为了与原有代码兼容，虽然本方法不再使用规则)
         rule_counts = np.zeros(16, dtype=np.int32)
         
-        # 计算每个agent的意见变化
-        opinion_changes = np.zeros(self.num_agents)
+        # 使用numba加速的函数进行主要计算
+        new_opinions, new_self_activation, new_social_influence = step_calculation(
+            self.opinions,
+            self.morals,
+            self.identities,
+            self.adj_matrix,
+            self.neighbors_indices,
+            self.neighbors_indptr,
+            self.alpha,
+            self.beta,
+            self.gamma,
+            self.delta,
+            self.u,
+            self.config.influence_factor
+        )
         
-        # 重置自我激活和社会影响的值
-        self.self_activation = np.zeros(self.num_agents, dtype=np.float64)
-        self.social_influence = np.zeros(self.num_agents, dtype=np.float64)
-        
-        for i in range(self.num_agents):
-            # 计算自我感知
-            sigma_ii = np.sign(self.opinions[i]) if self.opinions[i] != 0 else 0
-            
-            # 计算邻居影响总和
-            neighbor_influence = 0
-            
-            # 使用预先计算的邻居列表
-            for j in self.neighbors_list[i]:
-                sigma_same_identity = self.calculate_same_identity_sigma(i)
-                A_ij = calculate_relationship_coefficient_func(
-                    self.adj_matrix, 
-                    self.identities, 
-                    self.morals, 
-                    self.opinions, 
-                    i, j, 
-                    sigma_same_identity
-                )
-                sigma_ij = calculate_perceived_opinion_func(self.opinions, self.morals, i, j)
-                neighbor_influence += A_ij * sigma_ij
-            
-            # 计算并存储自我激活项
-            self.self_activation[i] = self.alpha[i] * sigma_ii
-            
-            # 计算并存储社会影响项
-            self.social_influence[i] = (self.beta / (1 + self.gamma[i] * self.morals[i])) * neighbor_influence
-            
-            # 计算意见变化率
-            # 回归中性意见项
-            regression_term = -self.delta * self.opinions[i]
-            
-            # 意见激活项
-            activation_term = self.u[i] * np.tanh(
-                self.self_activation[i] + self.social_influence[i]
-            )
-            
-            # 总变化
-            opinion_changes[i] = regression_term + activation_term
-        
-        # 应用意见变化，使用小步长避免过大变化
-        step_size = self.config.influence_factor  # 使用配置中的影响因子作为步长
-        self.opinions += step_size * opinion_changes
-        
-        # 确保意见值在[-1, 1]范围内
-        self.opinions = np.clip(self.opinions, -1, 1)
+        # 更新状态
+        self.opinions = new_opinions
+        self.self_activation = new_self_activation
+        self.social_influence = new_social_influence
         
         # 为了与原有代码兼容，存储规则计数
         self.rule_counts_history.append(rule_counts)
@@ -520,4 +598,4 @@ class Simulation:
                 "identity": self.identities[agent_id]
             }
         else:
-            return None
+            return None 
