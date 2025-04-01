@@ -7,14 +7,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def batch_test_morality_rates():
+def batch_test_morality_rates(output_dir = "morality_rate_test", steps = 200, morality_rates = [0.1, 0.3, 0.5, 0.7, 0.9]):
     """单独测试不同道德化率对规则使用的影响"""
-    base_dir = "morality_rate_test"
+    base_dir = output_dir
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
     
-    morality_rates = [0.1, 0.3, 0.5, 0.7, 0.9]  # 测试一系列不同的道德化率
-    steps = 200  # 每次模拟的步数
     
     # 创建规则累积使用统计的数组
     rule_cumulative_counts_by_rate = {}

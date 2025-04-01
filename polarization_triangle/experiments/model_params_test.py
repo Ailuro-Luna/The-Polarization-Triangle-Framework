@@ -7,9 +7,9 @@ from visualization.opinion_viz import draw_opinion_distribution, draw_opinion_di
 from visualization.network_viz import draw_network
 from visualization.activation_viz import draw_activation_components, draw_activation_history, draw_activation_heatmap, draw_activation_trajectory
 
-def batch_test_model_params():
+def batch_test_model_params(output_dir = "model_params_test", steps = 200):
     """测试不同极化三角框架模型参数对结果的影响"""
-    base_dir = "model_params_test"
+    base_dir = output_dir
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
     
@@ -42,7 +42,6 @@ def batch_test_model_params():
         }
     ]
     
-    steps = 200  # 每次模拟的步数
     
     for param_set in param_settings:
         print(f"Testing parameter set: {param_set['name']}")

@@ -8,9 +8,9 @@ from visualization.network_viz import draw_network
 from analysis.activation import compare_morality_activation
 
 # 添加新的测试函数，专门用于分析自我激活和社会影响
-def analyze_activation_components():
+def analyze_activation_components(output_dir = "activation_analysis", steps = 500):
     """分析不同设置下的自我激活和社会影响组件"""
-    base_dir = "activation_analysis"
+    base_dir = output_dir
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
     
@@ -20,8 +20,6 @@ def analyze_activation_components():
     # 基本配置
     base_params = copy.deepcopy(lfr_config)
     base_params.num_agents = 500  # 减少代理数量以加快测试
-    
-    steps = 500  # 模拟步数
     
     # 为每个道德化率创建单独的文件夹
     for mor_rate in morality_rates:
