@@ -2,12 +2,12 @@ import os
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
-from simulation import Simulation
-from config import SimulationConfig
-from config import lfr_config
-from visualization import draw_network
-from trajectory import run_simulation_with_trajectory, draw_opinion_trajectory, save_trajectory_to_csv
-from visualization import (
+from polarization_triangle.core.simulation import Simulation
+from polarization_triangle.core.config import lfr_config
+from polarization_triangle.visualization import draw_network, draw_opinion_distribution, draw_opinion_distribution_heatmap, draw_opinion_trajectory
+from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory, save_trajectory
+from polarization_triangle.utils.data_manager import save_trajectory_to_csv
+from polarization_triangle.visualization import (
     draw_network, 
     draw_opinion_distribution, 
     draw_opinion_distribution_heatmap,

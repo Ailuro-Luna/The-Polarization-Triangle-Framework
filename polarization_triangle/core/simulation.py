@@ -1,11 +1,9 @@
 # final_optimized_simulation.py
 import numpy as np
 import networkx as nx
-from numba import njit, int32, float64, prange, boolean
-from config import SimulationConfig
-from dynamics import *
+from polarization_triangle.core.config import SimulationConfig
+from polarization_triangle.core.dynamics import *
 from polarization_triangle.utils.network import create_network, handle_isolated_nodes
-from polarization_triangle.utils.data_manager import save_simulation_data
 from typing import Dict
 
 class Simulation:
@@ -18,19 +16,10 @@ class Simulation:
         self.graph = create_network(
             num_agents=self.num_agents,
             network_type=config.network_type,
-            p=config.p,
-            k=config.k,
-            mu=config.mu,
-            tau1=config.tau1,
-            tau2=config.tau2,
-            min_degree=config.min_degree,
-            max_degree=config.max_degree,
-            beta=config.beta
+            network_params=config.network_params,
         )
-        
         # 处理孤立节点
-        self.graph = handle_isolated_nodes(self.graph)
-        
+        handle_isolated_nodes(self.graph)
         # 获取邻接矩阵
         self.adj_matrix = nx.adjacency_matrix(self.graph).toarray()
 
@@ -359,4 +348,6 @@ class Simulation:
         返回:
         包含所有保存文件路径的字典
         """
+
+        from polarization_triangle.utils.data_manager import save_simulation_data
         return save_simulation_data(self, output_dir, prefix) 

@@ -1,3 +1,6 @@
+from numba import njit, int32, float64, prange, boolean
+import numpy as np
+
 def sample_morality(morality_rate):
     """
     根据道德化率随机生成一个道德值（0或1）

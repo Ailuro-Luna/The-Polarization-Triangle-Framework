@@ -11,7 +11,7 @@ def draw_network(sim, mode, title, filename):
         cmap = cm.coolwarm
         norm = colors.TwoSlopeNorm(vmin=-1, vcenter=0, vmax=1)
         node_colors = [cmap(norm(op)) for op in sim.opinions]
-        nx.draw(sim.G, pos=sim.pos, node_color=node_colors,
+        nx.draw(sim.graph, pos=sim.pos, node_color=node_colors,
                 with_labels=False, node_size=20, alpha=0.8,
                 edge_color="#AAAAAA", ax=ax)
         ax.set_title(title)
@@ -22,7 +22,7 @@ def draw_network(sim, mode, title, filename):
         cbar.set_label("Opinion")
     elif mode == "identity":
         node_colors = ['#e41a1c' if iden == 1 else '#377eb8' for iden in sim.identities]
-        nx.draw(sim.G, pos=sim.pos, node_color=node_colors,
+        nx.draw(sim.graph, pos=sim.pos, node_color=node_colors,
                 with_labels=False, node_size=20, alpha=0.8,
                 edge_color="#AAAAAA", ax=ax)
         ax.set_title(title)
@@ -34,7 +34,7 @@ def draw_network(sim, mode, title, filename):
         ax.legend(handles=patches, loc='upper right', title="Identity")
     elif mode == "morality":
         node_colors = ['#1a9850' if m == 1 else '#d73027' for m in sim.morals]
-        nx.draw(sim.G, pos=sim.pos, node_color=node_colors,
+        nx.draw(sim.graph, pos=sim.pos, node_color=node_colors,
                 with_labels=False, node_size=20, alpha=0.8,
                 edge_color="#AAAAAA", ax=ax)
         ax.set_title(title)
