@@ -138,9 +138,9 @@ lfr_config = SimulationConfig(
         "min_community": 10
     },
     opinion_distribution="twin_peak",
-    coupling="partial",
+    coupling="none",
     extreme_fraction=0.1,
-    moral_correlation="partial",
+    moral_correlation="none",
     cluster_identity=True,
     cluster_morality=True,
     cluster_opinion=True,

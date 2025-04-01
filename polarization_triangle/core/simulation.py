@@ -4,6 +4,9 @@ import networkx as nx
 from numba import njit, int32, float64, prange, boolean
 from config import SimulationConfig
 from dynamics import *
+from polarization_triangle.utils.network import create_network, handle_isolated_nodes
+from polarization_triangle.utils.data_manager import save_simulation_data
+from typing import Dict
 
 class Simulation:
     def __init__(self, config: SimulationConfig):
@@ -11,18 +14,27 @@ class Simulation:
         self.num_agents = config.num_agents
         self.network_type = config.network_type
 
-        # 根据网络类型生成网络
-        self.G = self._create_network()
-        self.G.remove_edges_from(nx.selfloop_edges(self.G))
+        # 创建网络
+        self.graph = create_network(
+            num_agents=self.num_agents,
+            network_type=config.network_type,
+            p=config.p,
+            k=config.k,
+            mu=config.mu,
+            tau1=config.tau1,
+            tau2=config.tau2,
+            min_degree=config.min_degree,
+            max_degree=config.max_degree,
+            beta=config.beta
+        )
+        
+        # 处理孤立节点
+        self.graph = handle_isolated_nodes(self.graph)
+        
+        # 获取邻接矩阵
+        self.adj_matrix = nx.adjacency_matrix(self.graph).toarray()
 
-        # 检查是否有孤立点
-        isolated_count = len([node for node, degree in dict(self.G.degree()).items() if degree == 0])
-        if isolated_count > 0:
-            print(f"警告: 移除自环后仍有 {isolated_count} 个孤立点，再次处理...")
-            self._handle_isolated_nodes(self.G)
-
-        self.pos = nx.spring_layout(self.G, k=0.1, iterations=50, scale=2.0, seed=42)
-        self.adj_matrix = nx.to_numpy_array(self.G, dtype=np.int32)
+        self.pos = nx.spring_layout(self.graph, k=0.1, iterations=50, scale=2.0, seed=42)
 
         # 初始化聚类主导属性
         self.cluster_identity_majority = {}
@@ -37,12 +49,12 @@ class Simulation:
         self.rule_counts_history = []
 
         if self.network_type in ['community', 'lfr']:
-            for node in self.G.nodes():
+            for node in self.graph.nodes():
                 block = None
                 if self.network_type == 'community':
-                    block = self.G.nodes[node].get("block")
+                    block = self.graph.nodes[node].get("block")
                 elif self.network_type == 'lfr':
-                    block = self.G.nodes[node].get("community")
+                    block = self.graph.nodes[node].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
                 if config.cluster_identity and block not in self.cluster_identity_majority:
@@ -115,85 +127,14 @@ class Simulation:
                 idx += 1
         self.neighbors_indptr[self.num_agents] = idx
 
-    def _create_network(self):
-        params = self.config.network_params
-        if self.network_type == 'random':
-            p = params.get("p", 0.1) if params else 0.1
-            return nx.erdos_renyi_graph(n=self.num_agents, p=p)
-        elif self.network_type == 'lfr':
-            tau1 = params.get("tau1", 3)
-            tau2 = params.get("tau2", 1.5)
-            mu = params.get("mu", 0.1)
-            average_degree = params.get("average_degree", 5)
-            min_community = params.get("min_community", 10)
-            return nx.LFR_benchmark_graph(
-                n=self.num_agents,
-                tau1=tau1,
-                tau2=tau2,
-                mu=mu,
-                average_degree=average_degree,
-                min_community=min_community,
-                seed=42
-            )
-        elif self.network_type == 'community':
-            community_sizes = [self.num_agents // 4] * 4
-            intra_p = params.get("intra_p", 0.8) if params else 0.8
-            inter_p = params.get("inter_p", 0.1) if params else 0.1
-            return nx.random_partition_graph(community_sizes, intra_p, inter_p)
-        elif self.network_type == 'ws':
-            k = params.get("k", 4)
-            p = params.get("p", 0.1)
-            return nx.watts_strogatz_graph(n=self.num_agents, k=k, p=p)
-        elif self.network_type == 'ba':
-            m = params.get("m", 2)
-            return nx.barabasi_albert_graph(n=self.num_agents, m=m)
-        else:
-            return nx.erdos_renyi_graph(n=self.num_agents, p=0.1)
-
-    def _handle_isolated_nodes(self, G):
-        """处理网络中的孤立点
-
-        参数:
-        G -- 网络图
-
-        处理方式:
-        1. 找出所有孤立点（度为0的节点）
-        2. 为每个孤立点随机连接到网络中的其他节点
-        """
-        isolated_nodes = [node for node, degree in dict(G.degree()).items() if degree == 0]
-
-        if not isolated_nodes:
-            return  # 如果没有孤立点，直接返回
-
-        print(f"检测到 {len(isolated_nodes)} 个孤立点，进行处理...")
-
-        # 获取非孤立节点列表
-        non_isolated = [node for node in G.nodes() if node not in isolated_nodes]
-
-        if not non_isolated:
-            # 如果所有节点都是孤立的（极少情况），创建一个环形连接
-            for i in range(len(isolated_nodes)):
-                G.add_edge(isolated_nodes[i], isolated_nodes[(i + 1) % len(isolated_nodes)])
-            return
-
-        # 为每个孤立点随机连接到1-3个非孤立节点
-        for node in isolated_nodes:
-            # 随机决定连接数量，最小1个，最大3个或所有非孤立节点数
-            num_connections = min(np.random.randint(1, 4), len(non_isolated))
-            # 随机选择连接目标
-            targets = np.random.choice(non_isolated, num_connections, replace=False)
-            # 添加边
-            for target in targets:
-                G.add_edge(node, target)
-
     def _init_identities(self):
         for i in range(self.num_agents):
             if self.config.cluster_identity and self.network_type in ['community', 'lfr']:
                 block = None
                 if self.network_type == 'community':
-                    block = self.G.nodes[i].get("block")
+                    block = self.graph.nodes[i].get("block")
                 elif self.network_type == 'lfr':
-                    block = self.G.nodes[i].get("community")
+                    block = self.graph.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
                 majority = self.cluster_identity_majority.get(block, 1)
@@ -207,9 +148,9 @@ class Simulation:
             if self.config.cluster_morality and self.network_type in ['community', 'lfr']:
                 block = None
                 if self.network_type == 'community':
-                    block = self.G.nodes[i].get("block")
+                    block = self.graph.nodes[i].get("block")
                 elif self.network_type == 'lfr':
-                    block = self.G.nodes[i].get("community")
+                    block = self.graph.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
                 majority = self.cluster_morality_majority.get(block, sample_morality(self.config.morality_rate))
@@ -223,9 +164,9 @@ class Simulation:
             if self.config.cluster_opinion and self.network_type in ['community', 'lfr']:
                 block = None
                 if self.network_type == 'community':
-                    block = self.G.nodes[i].get("block")
+                    block = self.graph.nodes[i].get("block")
                 elif self.network_type == 'lfr':
-                    block = self.G.nodes[i].get("community")
+                    block = self.graph.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
                 majority = self.cluster_opinion_majority.get(block)
@@ -407,103 +348,15 @@ class Simulation:
         else:
             return None
 
-    def save_simulation_data(self, output_dir, prefix='sim_data'):
+    def save_simulation_data(self, output_dir: str, prefix: str = 'sim_data') -> Dict[str, str]:
         """
         保存模拟数据到文件，便于后续进行统计分析
         
         参数:
         output_dir -- 输出目录路径
         prefix -- 文件名前缀
+        
+        返回:
+        包含所有保存文件路径的字典
         """
-        import os
-        import pandas as pd
-        import numpy as np
-        
-        # 创建目录（如果不存在）
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        # 保存轨迹数据
-        trajectory_data = {
-            'step': [],
-            'agent_id': [],
-            'opinion': [],
-            'identity': [],
-            'morality': [],
-            'self_activation': [],
-            'social_influence': []
-        }
-        
-        # 获取完整历史
-        activation_history = self.get_activation_history()
-        
-        # 如果存在历史数据
-        if self.self_activation_history:
-            # 为每一步、每个agent添加数据
-            for step in range(len(self.self_activation_history)):
-                for agent_id in range(self.num_agents):
-                    trajectory_data['step'].append(step)
-                    trajectory_data['agent_id'].append(agent_id)
-                    # 对于opinion需要从trajectory中获取，如果没有则用当前值
-                    if hasattr(self, 'opinion_trajectory') and step < len(self.opinion_trajectory):
-                        trajectory_data['opinion'].append(self.opinion_trajectory[step][agent_id])
-                    else:
-                        trajectory_data['opinion'].append(self.opinions[agent_id])
-                    
-                    trajectory_data['identity'].append(self.identities[agent_id])
-                    trajectory_data['morality'].append(self.morals[agent_id])
-                    trajectory_data['self_activation'].append(activation_history['self_activation_history'][step][agent_id])
-                    trajectory_data['social_influence'].append(activation_history['social_influence_history'][step][agent_id])
-        
-        # 将数据转换为DataFrame并保存为CSV
-        df = pd.DataFrame(trajectory_data)
-        trajectory_csv_path = os.path.join(output_dir, f"{prefix}_trajectory.csv")
-        df.to_csv(trajectory_csv_path, index=False)
-        
-        # 保存最终状态数据
-        final_state = {
-            'agent_id': list(range(self.num_agents)),
-            'opinion': self.opinions.tolist(),
-            'identity': self.identities.tolist(),
-            'morality': self.morals.tolist(),
-            'self_activation': self.self_activation.tolist(),
-            'social_influence': self.social_influence.tolist()
-        }
-        
-        df_final = pd.DataFrame(final_state)
-        final_csv_path = os.path.join(output_dir, f"{prefix}_final_state.csv")
-        df_final.to_csv(final_csv_path, index=False)
-        
-        # 保存网络结构
-        network_data = []
-        for i in range(self.num_agents):
-            for j in range(i+1, self.num_agents):  # 只保存上三角矩阵避免重复
-                if self.adj_matrix[i, j] > 0:
-                    network_data.append({
-                        'source': i,
-                        'target': j,
-                        'weight': self.adj_matrix[i, j]
-                    })
-        
-        df_network = pd.DataFrame(network_data)
-        network_csv_path = os.path.join(output_dir, f"{prefix}_network.csv")
-        df_network.to_csv(network_csv_path, index=False)
-        
-        # 保存模拟配置
-        config_dict = vars(self.config)
-        config_data = []
-        for key, value in config_dict.items():
-            # 跳过无法序列化的复杂对象
-            if isinstance(value, (int, float, str, bool)) or value is None:
-                config_data.append({'parameter': key, 'value': value})
-        
-        df_config = pd.DataFrame(config_data)
-        config_csv_path = os.path.join(output_dir, f"{prefix}_config.csv")
-        df_config.to_csv(config_csv_path, index=False)
-        
-        return {
-            'trajectory': trajectory_csv_path,
-            'final_state': final_csv_path,
-            'network': network_csv_path,
-            'config': config_csv_path
-        } 
+        return save_simulation_data(self, output_dir, prefix) 
