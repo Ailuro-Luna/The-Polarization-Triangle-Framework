@@ -91,7 +91,7 @@ def batch_test():
                                      start_opinion_path)
 
                         # 运行模拟并记录完整轨迹
-                        trajectory = run_simulation_with_trajectory(sim, steps=100)
+                        trajectory = run_simulation_with_trajectory(sim, steps=500)
                         
                         # 保存轨迹数据到CSV
                         data_folder = os.path.join(folder_path, "data")

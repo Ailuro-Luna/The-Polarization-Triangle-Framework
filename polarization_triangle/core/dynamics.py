@@ -173,7 +173,8 @@ def step_calculation(opinions, morals, identities, adj_matrix,
             neighbor_influence += A_ij * sigma_ij
         
         # 计算并存储自我激活项
-        self_activation[i] = alpha[i] * sigma_ii
+        # self_activation[i] = alpha[i] * sigma_ii
+        self_activation[i] = alpha[i] * opinions[i]
         
         # 计算并存储社会影响项
         social_influence[i] = (beta / (1 + gamma[i] * morals[i])) * neighbor_influence

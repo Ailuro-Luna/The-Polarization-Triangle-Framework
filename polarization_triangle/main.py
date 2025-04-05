@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-极化三角框架主入口文件
-提供命令行接口来运行各种模拟测试
+Polarization Triangle Framework Main Entry File
+Provides command line interface to run various simulation tests
 """
 
 import os
 import sys
 import argparse
 
-# 添加项目根目录到路径
+# Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -21,56 +21,98 @@ from polarization_triangle.experiments.activation_analysis import analyze_activa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="极化三角框架模拟测试")
-    parser.add_argument("--test-type", type=str, required=True, 
-                        choices=["basic", "morality", "model-params", "activation"],
-                        help="要运行的测试类型")
-    parser.add_argument("--output-dir", type=str, default=None,
-                        help="输出结果的目录路径 (注：仅适用于morality、model-params和activation测试)")
+    """
+    Main entry function
+    """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Polarization Triangle Framework Simulation")
+    parser.add_argument("--test-type", 
+                        choices=["basic", "morality", "model-params", "activation", "verification"],
+                        default="basic",
+                        help="Type of test to run")
+    parser.add_argument("--output-dir", type=str, default="batch_results",
+                       help="Output directory name")
     parser.add_argument("--steps", type=int, default=200,
-                        help="每次模拟的步数")
-    
-    # 道德化率测试特有参数
+                       help="Number of simulation steps")
     parser.add_argument("--morality-rates", type=float, nargs="+", 
-                        default=[0.1, 0.3, 0.5, 0.7, 0.9],
-                        help="要测试的道德化率列表 (仅用于morality测试)")
+                       default=[0.2, 0.4, 0.6, 0.8],
+                       help="List of morality rates for morality test")
+    parser.add_argument("--verification-type", 
+                        choices=["alpha", "alphabeta"],
+                        default="alpha",
+                        help="Verification type (used only when test-type is verification)")
+    parser.add_argument("--alpha-min", type=float, default=-1.0,
+                       help="Minimum alpha value for analysis (used only when verification-type is alpha)")
+    parser.add_argument("--alpha-max", type=float, default=2.0,
+                       help="Maximum alpha value for analysis (used only when verification-type is alpha)")
+    parser.add_argument("--low-alpha", type=float, default=0.5,
+                       help="Low alpha value for alphabeta analysis")
+    parser.add_argument("--high-alpha", type=float, default=1.5,
+                       help="High alpha value for alphabeta analysis")
+    parser.add_argument("--beta-min", type=float, default=0.1,
+                       help="Minimum beta value for alphabeta analysis")
+    parser.add_argument("--beta-max", type=float, default=2.0,
+                       help="Maximum beta value for alphabeta analysis")
+    parser.add_argument("--beta-steps", type=int, default=10,
+                       help="Number of beta steps for alphabeta analysis")
+    parser.add_argument("--morality-rate", type=float, default=0.0,
+                       help="Morality rate for alphabeta analysis (0.0-1.0)")
+    parser.add_argument("--num-runs", type=int, default=10,
+                       help="Number of simulation runs per parameter combination for alphabeta analysis")
     
     args = parser.parse_args()
     
-    # 设置默认输出目录
-    if args.output_dir is None:
-        if args.test_type == "basic":
-            # 对于基本测试，输出目录是固定的
-            pass
-        elif args.test_type == "morality":
-            args.output_dir = "morality_rate_test"
-        elif args.test_type == "model-params":
-            args.output_dir = "model_params_test"
-        elif args.test_type == "activation":
-            args.output_dir = "activation_analysis"
-    
-    # 根据测试类型运行相应的测试
+    # Run different tests based on test type
     if args.test_type == "basic":
-        print(f"开始运行基本批量模拟测试，结果将保存到固定目录: batch_results")
-        batch_test()  # 不传递output_dir参数
+        print("Running basic simulation...")
+        # Import and run run_basic_simulation from scripts module
+        from polarization_triangle.scripts.run_basic_simulation import run_basic_simulation
+        run_basic_simulation(output_dir=args.output_dir, steps=args.steps)
+        
     elif args.test_type == "morality":
-        print(f"开始运行道德化率测试，步数: {args.steps}, 道德化率: {args.morality_rates}")
-        print(f"结果将保存到: {args.output_dir}")
-        batch_test_morality_rates(output_dir=args.output_dir, 
-                                  steps=args.steps,
-                                  morality_rates=args.morality_rates)
+        print(f"Running morality rate test, morality rates: {args.morality_rates}...")
+        # Import and run run_morality_test from scripts module
+        from polarization_triangle.scripts.run_morality_test import run_morality_test
+        run_morality_test(output_dir=args.output_dir, steps=args.steps, 
+                         morality_rates=args.morality_rates)
+        
     elif args.test_type == "model-params":
-        print(f"开始运行模型参数测试，步数: {args.steps}")
-        print(f"结果将保存到: {args.output_dir}")
-        batch_test_model_params(output_dir=args.output_dir, 
-                               steps=args.steps)
+        print("Running model parameters test...")
+        # Import and run run_model_params_test from scripts module
+        from polarization_triangle.scripts.run_model_params_test import run_model_params_test
+        run_model_params_test(output_dir=args.output_dir, steps=args.steps)
+        
     elif args.test_type == "activation":
-        print(f"开始运行激活组件分析，步数: {args.steps}")
-        print(f"结果将保存到: {args.output_dir}")
-        analyze_activation_components(output_dir=args.output_dir,
-                                     steps=args.steps)
+        print("Running activation component analysis...")
+        # Import and run run_activation_analysis from scripts module
+        from polarization_triangle.scripts.run_activation_analysis import run_activation_analysis
+        run_activation_analysis(output_dir=args.output_dir, steps=args.steps)
+        
+    elif args.test_type == "verification":
+        print(f"Running verification analysis, type: {args.verification_type}...")
+        if args.verification_type == "alpha":
+            from polarization_triangle.verification.alpha_analysis import AlphaVerification
+            verification = AlphaVerification(
+                alpha_range=(args.alpha_min, args.alpha_max),
+                output_dir=os.path.join(args.output_dir, "alpha_verification")
+            )
+            verification.run()
+        elif args.verification_type == "alphabeta":
+            from polarization_triangle.scripts.run_alphabeta_verification import run_alphabeta_verification
+            output_dir = os.path.join(args.output_dir, "alphabeta_verification")
+            run_alphabeta_verification(
+                output_dir=output_dir,
+                steps=args.steps,
+                low_alpha=args.low_alpha,
+                high_alpha=args.high_alpha,
+                beta_min=args.beta_min,
+                beta_max=args.beta_max,
+                beta_steps=args.beta_steps,
+                morality_rate=args.morality_rate,
+                num_runs=args.num_runs
+            )
     
-    print("测试完成！")
+    print("Completed!")
 
 
 if __name__ == "__main__":
