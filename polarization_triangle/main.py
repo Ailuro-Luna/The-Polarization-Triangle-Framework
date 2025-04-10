@@ -38,7 +38,7 @@ def main():
                        default=[0.2, 0.4, 0.6, 0.8],
                        help="List of morality rates for morality test")
     parser.add_argument("--verification-type", 
-                        choices=["alpha", "alphabeta"],
+                        choices=["alpha", "alphabeta", "agent_interaction", "all"],
                         default="alpha",
                         help="Verification type (used only when test-type is verification)")
     parser.add_argument("--alpha-min", type=float, default=-1.0,
@@ -89,14 +89,18 @@ def main():
         
     elif args.test_type == "verification":
         print(f"Running verification analysis, type: {args.verification_type}...")
-        if args.verification_type == "alpha":
+        
+        # Function to run alpha verification
+        def run_alpha_verification():
             from polarization_triangle.verification.alpha_analysis import AlphaVerification
             verification = AlphaVerification(
                 alpha_range=(args.alpha_min, args.alpha_max),
                 output_dir=os.path.join(args.output_dir, "alpha_verification")
             )
             verification.run()
-        elif args.verification_type == "alphabeta":
+            
+        # Function to run alphabeta verification    
+        def run_alphabeta_verification():
             from polarization_triangle.scripts.run_alphabeta_verification import run_alphabeta_verification
             output_dir = os.path.join(args.output_dir, "alphabeta_verification")
             run_alphabeta_verification(
@@ -110,6 +114,26 @@ def main():
                 morality_rate=args.morality_rate,
                 num_runs=args.num_runs
             )
+            
+        # Function to run agent interaction verification
+        def run_agent_interaction_verification():
+            from polarization_triangle.verification.agent_interaction_verification import main as agent_verification_main
+            output_dir = os.path.join(args.output_dir, "agent_interaction_verification")
+            os.makedirs(output_dir, exist_ok=True)
+            agent_verification_main()
+            
+        # Run verification based on type
+        if args.verification_type == "alpha":
+            run_alpha_verification()
+        elif args.verification_type == "alphabeta":
+            run_alphabeta_verification()
+        elif args.verification_type == "agent_interaction":
+            run_agent_interaction_verification()
+        elif args.verification_type == "all":
+            print("Running all verification types...")
+            run_alpha_verification()
+            run_alphabeta_verification()
+            run_agent_interaction_verification()
     
     print("Completed!")
 
