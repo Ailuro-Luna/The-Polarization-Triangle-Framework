@@ -1,11 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
-import matplotlib.cm as cm
-from matplotlib.colors import Normalize
 import os
 from pathlib import Path
 import pandas as pd
+from polarization_triangle.visualization.alpha_viz import AlphaVisualizer
 
 class AlphaVerification:
     """
@@ -38,6 +37,9 @@ class AlphaVerification:
             Path(__file__).parent.parent.parent, 'results', 'verification'
         )
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Initialize visualizer
+        self.visualizer = AlphaVisualizer(output_dir=self.output_dir)
     
     def dzdt(self, z, alpha):
         """
@@ -146,26 +148,16 @@ class AlphaVerification:
         if z_values is None:
             z_values = np.linspace(self.z_range[0], self.z_range[1], 1000)
         
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Calculate dzdt values for each alpha
+        dzdt_values_by_alpha = {}
+        equilibria_by_alpha = {}
         
         for alpha in alpha_values:
-            dzdt_values = self.dzdt(z_values, alpha)
-            ax.plot(z_values, dzdt_values, label=f'alpha = {alpha:.1f}')
-            
-            # Mark equilibrium points
-            equilibria = self.find_equilibrium_points(alpha)
-            for eq in equilibria:
-                ax.plot(eq, 0, 'o', markersize=6)
+            dzdt_values_by_alpha[alpha] = self.dzdt(z_values, alpha)
+            equilibria_by_alpha[alpha] = self.find_equilibrium_points(alpha)
         
-        ax.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-        ax.axvline(x=0, color='k', linestyle='-', alpha=0.3)
-        ax.set_xlabel('z (Opinion Value)', fontsize=14)
-        ax.set_ylabel('dz/dt', fontsize=14)
-        ax.set_title('dz/dt = -z + tanh(alpha*z) for Different alpha Values', fontsize=16)
-        ax.legend()
-        ax.grid(True)
-        
-        return fig, ax
+        # Use visualizer to create the plot
+        return self.visualizer.visualize_dzdt(z_values, dzdt_values_by_alpha, alpha_values, equilibria_by_alpha)
     
     def analyze_time_evolution(self, alpha_values=None, z0_values=None, t_max=None):
         """
@@ -195,32 +187,19 @@ class AlphaVerification:
         
         t_eval = np.linspace(0, t_max, 1000)
         
-        fig, axes = plt.subplots(len(alpha_values), 1, figsize=(10, 12), sharex=True)
-        if len(alpha_values) == 1:
-            axes = [axes]
+        # Calculate time evolutions for each alpha and z0
+        time_evolutions = {}
+        equilibria_by_alpha = {}
         
-        for i, alpha in enumerate(alpha_values):
-            ax = axes[i]
+        for alpha in alpha_values:
+            equilibria_by_alpha[alpha] = self.find_equilibrium_points(alpha)
             
             for z0 in z0_values:
                 sol = self.solve_ode(alpha, z0, (0, t_max), t_eval)
-                ax.plot(sol.t, sol.y[0], label=f'z0 = {z0:.1f}')
-            
-            # Mark equilibrium points
-            equilibria = self.find_equilibrium_points(alpha)
-            for eq in equilibria:
-                ax.axhline(y=eq, color='r', linestyle='--', alpha=0.5)
-            
-            ax.set_ylabel('z(t)', fontsize=12)
-            ax.set_title(f'alpha = {alpha:.1f}', fontsize=14)
-            ax.legend(loc='best')
-            ax.grid(True)
+                time_evolutions[(alpha, z0)] = sol
         
-        axes[-1].set_xlabel('Time', fontsize=14)
-        fig.suptitle('Time Evolution of z for Different alpha Values: dz/dt = -z + tanh(alpha*z)', fontsize=16)
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
-        
-        return fig, axes
+        # Use visualizer to create the plot
+        return self.visualizer.visualize_time_evolution(time_evolutions, alpha_values, equilibria_by_alpha)
     
     def analyze_bifurcation(self, z0_values=None, num_alphas=100, t_max=None):
         """
@@ -247,8 +226,6 @@ class AlphaVerification:
         
         alpha_values = np.linspace(self.alpha_range[0], self.alpha_range[1], num_alphas)
         
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
         equilibria_data = []
         
         for alpha in alpha_values:
@@ -259,16 +236,8 @@ class AlphaVerification:
             for eq in equilibria:
                 equilibria_data.append((alpha, eq))
         
-        # Plot bifurcation diagram
-        alpha_eq, z_eq = zip(*equilibria_data) if equilibria_data else ([], [])
-        ax.scatter(alpha_eq, z_eq, s=10, color='b', alpha=0.7)
-        
-        ax.set_xlabel('alpha (Self-Activation Coefficient)', fontsize=14)
-        ax.set_ylabel('Equilibrium Point z*', fontsize=14)
-        ax.set_title('Bifurcation Diagram: dz/dt = -z + tanh(alpha*z)', fontsize=16)
-        ax.grid(True)
-        
-        return fig, ax
+        # Use visualizer to create the plot
+        return self.visualizer.visualize_bifurcation(equilibria_data)
     
     def analyze_critical_alpha(self):
         """
@@ -286,46 +255,18 @@ class AlphaVerification:
         alpha_values = [0.8, 0.9, 0.99, 1.0, 1.01, 1.1, 1.2]
         z_values = np.linspace(-2, 2, 1000)
         
-        # Calculate dzdt and equilibrium points for different alpha values
-        fig, axes = plt.subplots(2, 1, figsize=(12, 12))
+        # Calculate dzdt values for each alpha
+        critical_alpha_data = {}
         
-        # Plot dzdt functions
-        ax1 = axes[0]
         for alpha in alpha_values:
-            dzdt_values = self.dzdt(z_values, alpha)
-            ax1.plot(z_values, dzdt_values, label=f'alpha = {alpha:.2f}')
-            
-            # Mark equilibrium points
-            equilibria = self.find_equilibrium_points(alpha)
-            for eq in equilibria:
-                ax1.plot(eq, 0, 'o', markersize=6)
+            critical_alpha_data[alpha] = self.dzdt(z_values, alpha)
         
-        ax1.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-        ax1.axvline(x=0, color='k', linestyle='-', alpha=0.3)
-        ax1.set_xlabel('z (Opinion Value)', fontsize=14)
-        ax1.set_ylabel('dz/dt', fontsize=14)
-        ax1.set_title('dz/dt Function Near Critical alpha: dz/dt = -z + tanh(alpha*z)', fontsize=16)
-        ax1.legend()
-        ax1.grid(True)
-        
-        # Analyze derivative at z = 0
-        ax2 = axes[1]
+        # Calculate derivative at z = 0
         alpha_fine = np.linspace(0.5, 1.5, 1000)
         derivative_at_zero = np.array([-1 + alpha for alpha in alpha_fine])
         
-        ax2.plot(alpha_fine, derivative_at_zero)
-        ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-        ax2.axvline(x=1.0, color='r', linestyle='--', alpha=0.7, 
-                   label='Critical Value alpha = 1')
-        
-        ax2.set_xlabel('alpha (Self-Activation Coefficient)', fontsize=14)
-        ax2.set_ylabel('Derivative at z=0 (∂(dz/dt)/∂z)', fontsize=14)
-        ax2.set_title('Stability Analysis at z=0', fontsize=16)
-        ax2.grid(True)
-        ax2.legend()
-        
-        plt.tight_layout()
-        return fig, axes
+        # Use visualizer to create the plot
+        return self.visualizer.visualize_critical_alpha(z_values, critical_alpha_data, (alpha_fine, derivative_at_zero))
         
     def generate_analysis_report(self):
         """
@@ -452,6 +393,11 @@ class AlphaVerification:
         # Save equilibrium point data
         csv_path = os.path.join(self.output_dir, 'equilibrium_data.csv')
         df.to_csv(csv_path, index=False)
+        
+        # Create additional visualization for equilibrium data
+        fig = self.visualizer.visualize_equilibrium_data(df)
+        fig.savefig(os.path.join(self.output_dir, 'equilibrium_stability.png'), dpi=300, bbox_inches='tight')
+        plt.close(fig)
         
         return report_path
         

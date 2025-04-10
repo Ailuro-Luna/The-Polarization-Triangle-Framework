@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from polarization_triangle.verification.alphabeta_analysis import AlphaBetaVerification, AlphaBetaVerificationConfig
 from polarization_triangle.core.config import SimulationConfig, lfr_config
 
-def run_alphabeta_verification(output_dir="verification_results/alphabeta_no_morality", 
+def run_alphabeta_verification(output_dir="results/verification/alphabeta_no_morality", 
                              steps=300, 
                              low_alpha=0.5, 
                              high_alpha=1.5,
@@ -58,7 +58,7 @@ def run_alphabeta_verification(output_dir="verification_results/alphabeta_no_mor
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Alpha-Beta verification analysis")
-    parser.add_argument("--output-dir", type=str, default="verification_results/alphabeta_no_morality",
+    parser.add_argument("--output-dir", type=str, default="results/verification/alphabeta_no_morality",
                         help="Output directory")
     parser.add_argument("--steps", type=int, default=300,
                         help="Number of simulation steps")

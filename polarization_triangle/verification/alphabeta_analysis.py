@@ -32,7 +32,7 @@ from polarization_triangle.visualization.opinion_viz import (
 @dataclass
 class AlphaBetaVerificationConfig:
     """Alpha-Beta验证实验的配置类"""
-    output_dir: str = "verification_results/alphabeta"
+    output_dir: str = "results/verification/alphabeta"
     base_config: SimulationConfig = None
     steps: int = 300
     # alpha值设置（低、中、高）
