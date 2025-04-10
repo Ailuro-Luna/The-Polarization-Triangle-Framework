@@ -84,9 +84,8 @@ def main():
         
     elif args.test_type == "activation":
         print("Running activation component analysis...")
-        # Import and run run_activation_analysis from scripts module
-        from polarization_triangle.scripts.run_activation_analysis import run_activation_analysis
-        run_activation_analysis(output_dir=args.output_dir, steps=args.steps)
+        # run analyze_activation_components from experiments module
+        analyze_activation_components(output_dir=args.output_dir, steps=args.steps)
         
     elif args.test_type == "verification":
         print(f"Running verification analysis, type: {args.verification_type}...")
