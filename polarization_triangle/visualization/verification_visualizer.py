@@ -4,7 +4,7 @@ import pandas as pd
 import os
 from pathlib import Path
 
-def plot_verification_results(results, output_dir='results/verification'):
+def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification'):
     """
     Plot verification results
     
