@@ -115,7 +115,8 @@ def main():
             from polarization_triangle.verification.agent_interaction_verification import main as agent_verification_main
             output_dir = os.path.join(args.output_dir, "agent_interaction_verification")
             # os.makedirs(output_dir, exist_ok=True)
-            agent_verification_main(output_dir=output_dir, num_steps=args.steps)
+            # agent_verification_main(output_dir=output_dir, num_steps=args.steps)
+            agent_verification_main(output_dir=output_dir, num_steps=1)
             
         # Run verification based on type
         if args.verification_type == "alpha":

@@ -3,121 +3,149 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 from pathlib import Path
+from matplotlib.patches import Patch
 
 def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification'):
     """
-    Plot verification results
+    Plot verification results showing paired opinion changes for focal and neighbor agents.
     
     Parameters:
-    results -- DataFrame with verification results
+    results -- DataFrame with verification results including focal and neighbor changes
     output_dir -- Output directory
     """
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
     
-    # Create a bar chart with categories
-    plt.figure(figsize=(14, 8))
+    plt.figure(figsize=(20, 10))
     
     # Set positions for bars
-    x = np.arange(len(results))
-    width = 0.8
+    num_rules = len(results)
+    x = np.arange(num_rules)
+    width = 0.35
     
-    # Set colors based on opinion_change values
-    colors = []
-    for change in results['opinion_change']:
-        if change > 0.05:  # Significant positive change
-            colors.append('green')
-        elif change < -0.05:  # Significant negative change
-            colors.append('red')
-        else:  # Small change
-            colors.append('blue')
+    # Draw bar chart for focal and neighbor agents
+    rects1 = plt.bar(x - width/2, results['focal_opinion_change'], width, label='Focal Agent', color='royalblue')
+    # Add hatch for neighbor agent for distinction in this plot as well
+    rects2 = plt.bar(x + width/2, results['neighbor_opinion_change'], width, label='Neighbor Agent (Hatched)', color='lightcoral', hatch='//')
     
-    # Draw bar chart
-    bars = plt.bar(x, results['opinion_change'], width, color=colors)
-    
-    # Add rule labels
-    plt.xticks(x, results['rule'], rotation=45, ha='right')
+    # Add rule labels and expected effect
+    plt.xticks(x, results['rule'], rotation=60, ha='right')
     
     # Add y=0 horizontal line
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     
     # Set title and labels
-    plt.title('Agent Interaction Verification: Opinion Changes of Focal Agent', fontsize=16)
+    plt.title('Agent Interaction Verification: Paired Opinion Changes', fontsize=16)
     plt.xlabel('Verification Rules', fontsize=14)
     plt.ylabel('Opinion Change', fontsize=14)
     
     # Add value labels to each bar
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., 
-                 height if height >= 0 else height - 0.02,
-                 f'{height:.3f}',
-                 ha='center', va='bottom' if height >= 0 else 'top', fontsize=9)
+    def add_labels(rects, offset=0.01):
+        for rect in rects:
+            height = rect.get_height()
+            plt.text(rect.get_x() + rect.get_width() / 2., 
+                     height + offset if height >= 0 else height - offset,
+                     f'{height:.3f}',
+                     ha='center', va='bottom' if height >= 0 else 'top', fontsize=8)
+            
+    add_labels(rects1)
+    add_labels(rects2)
     
-    # Add legend
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor='green', label='Positive Change (More Extreme)'),
-        Patch(facecolor='blue', label='Minor Change'),
-        Patch(facecolor='red', label='Negative Change (More Neutral)')
-    ]
-    plt.legend(handles=legend_elements, loc='best')
+    # Add expected effect text above each pair
+    # Recalculate y-limits after plotting bars and labels
+    y_min, y_max = plt.gca().get_ylim()
+    # Adjust vertical position and font size for effect text
+    text_y_position = y_max - (y_max - y_min) * 0.02 # Position text near the top
     
-    plt.tight_layout()
+    for i, effect in enumerate(results['expected_effect']):
+        plt.text(x[i], text_y_position, effect, 
+                 ha='center', va='top', fontsize=6.5, rotation=0, # Use va='top', smaller font
+                 bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
+
+    plt.legend(loc='upper left')
+    
+    # Add a bit more room at the top for text
+    plt.ylim(y_min, y_max + (y_max - y_min) * 0.1)
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.95]) # Adjust rect slightly if needed
     
     # Save chart
-    plt.savefig(os.path.join(output_dir, 'verification_results_plot.png'), dpi=300)
+    plot_path = os.path.join(output_dir, 'verification_results_paired_plot.png')
+    plt.savefig(plot_path, dpi=300)
     plt.close()
     
     # Print save path
-    print(f"Chart saved to: {os.path.join(output_dir, 'verification_results_plot.png')}")
+    print(f"Paired chart saved to: {plot_path}")
     
     # Create charts grouped by categories
     plot_by_categories(results, output_dir)
 
 def plot_by_categories(results, output_dir):
-    """Plot results grouped by different categories"""
+    """Plot results grouped by different categories with paired bars"""
     # Group data
-    same_op_same_id = results.iloc[0:4]  # Rule 1-4
-    same_op_diff_id = results.iloc[4:8]  # Rule 5-8
-    diff_op_same_id = results.iloc[8:12]  # Rule 9-12
-    diff_op_diff_id = results.iloc[12:16]  # Rule 13-16
+    groups = {
+        'Same Opinion, Same Identity': results.iloc[0:4],
+        'Same Opinion, Different Identity': results.iloc[4:8],
+        'Different Opinion, Same Identity': results.iloc[8:12],
+        'Different Opinion, Different Identity': results.iloc[12:16]
+    }
     
-    # Create 2x2 subplots
-    fig, axs = plt.subplots(2, 2, figsize=(18, 12))
+    fig, axs = plt.subplots(2, 2, figsize=(18, 15)) # Slightly taller figure
+    axs = axs.flatten()
     
-    # Set subplot titles
-    axs[0, 0].set_title('Same Opinion Direction, Same Identity', fontsize=14)
-    axs[0, 1].set_title('Same Opinion Direction, Different Identity', fontsize=14)
-    axs[1, 0].set_title('Different Opinion Direction, Same Identity', fontsize=14)
-    axs[1, 1].set_title('Different Opinion Direction, Different Identity', fontsize=14)
+    group_keys = list(groups.keys())
+    moralization_legend_elements = [] # Collect unique moralization patches
+    seen_moralization_keys = set()
     
-    # Draw subplots
-    plot_category(axs[0, 0], same_op_same_id)
-    plot_category(axs[0, 1], same_op_diff_id)
-    plot_category(axs[1, 0], diff_op_same_id)
-    plot_category(axs[1, 1], diff_op_diff_id)
-    
+    for i in range(4):
+        ax = axs[i]
+        group_name = group_keys[i]
+        data = groups[group_name]
+        
+        ax.set_title(group_name, fontsize=14)
+        category_legend = plot_category(ax, data)
+        
+        # Collect unique legend patches for moralization status
+        for handle in category_legend:
+            key = (handle.get_facecolor(), handle.get_label())
+            if key not in seen_moralization_keys:
+                 moralization_legend_elements.append(handle)
+                 seen_moralization_keys.add(key)
+
     # Add main title
-    plt.suptitle('Agent Interaction Verification: Opinion Changes by Scenario Category', fontsize=16)
+    plt.suptitle('Agent Interaction Verification: Paired Opinion Changes by Scenario Category', fontsize=16)
     
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for the main title
+    # Create separate legends: one for agent type, one for moralization color code
+    focal_patch = Patch(facecolor='gray', label='Focal Agent')
+    neighbor_patch = Patch(facecolor='gray', hatch='//', label='Neighbor Agent')
+    agent_legend_handles = [focal_patch, neighbor_patch]
+    
+    # Place legends: Agent type top-right, Moralization code bottom-center
+    fig.legend(handles=agent_legend_handles, loc='upper right', bbox_to_anchor=(0.98, 0.98))
+    # Use unique moralization patches collected from subplots
+    fig.legend(handles=moralization_legend_elements, loc='lower center', ncol=4, bbox_to_anchor=(0.5, 0.01), title="Moralization (Focal - Neighbor)")
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95]) # Adjust layout for legends/title
     
     # Save chart
-    plt.savefig(os.path.join(output_dir, 'verification_results_by_category.png'), dpi=300)
+    plot_path = os.path.join(output_dir, 'verification_results_by_category_paired.png')
+    plt.savefig(plot_path, dpi=300)
     plt.close()
     
     # Print save path
-    print(f"Category chart saved to: {os.path.join(output_dir, 'verification_results_by_category.png')}")
+    print(f"Category paired chart saved to: {plot_path}")
 
 def plot_category(ax, data):
-    """Plot a category of data on the given axis"""
+    """Plot a category of data with paired bars on the given axis, using hatches for neighbors."""
     # Set positions for bars
-    x = np.arange(len(data))
-    width = 0.6
+    num_rules = len(data)
+    x = np.arange(num_rules)
+    width = 0.35
     
-    # Draw bar chart
-    bars = ax.bar(x, data['opinion_change'], width)
+    # Draw bar chart for focal (no hatch) and neighbor (with hatch initially)
+    rects1 = ax.bar(x - width/2, data['focal_opinion_change'], width, label='Focal')
+    # Initialize neighbor bars with hatch, color will be set in loop
+    rects2 = ax.bar(x + width/2, data['neighbor_opinion_change'], width, label='Neighbor', hatch='//') 
     
     # Add rule labels
     ax.set_xticks(x)
@@ -126,39 +154,70 @@ def plot_category(ax, data):
     # Add y=0 horizontal line
     ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     
-    # Color each bar based on moralization status
-    for i, bar in enumerate(bars):
+    # Color bars based on moralization status (same color for the pair)
+    colors = {
+        (0, 0): 'lightblue', (0, 1): 'lightgreen',
+        (1, 0): 'orange', (1, 1): 'pink'
+    }
+    legend_labels = {
+        (0, 0): 'NM - NM', (0, 1): 'NM - M',
+        (1, 0): 'M - NM', (1, 1): 'M - M'
+    }
+    current_legend_elements = []
+    seen_keys_in_category = set()
+    
+    for i in range(num_rules):
         focal_m = data.iloc[i]['focal_m']
         other_m = data.iloc[i]['other_m']
+        color_key = (focal_m, other_m)
+        bar_color = colors.get(color_key, 'gray')
         
-        if focal_m == 0 and other_m == 0:
-            bar.set_color('lightblue')
-        elif focal_m == 0 and other_m == 1:
-            bar.set_color('lightgreen')
-        elif focal_m == 1 and other_m == 0:
-            bar.set_color('orange')
-        else:  # focal_m == 1 and other_m == 1
-            bar.set_color('pink')
+        # Set color for focal bar
+        rects1[i].set_color(bar_color)
+        rects1[i].set_edgecolor('black') # Add consistent edge color
         
-        # Add value labels
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., 
-                height if height >= 0 else height - 0.02,
-                f'{height:.3f}',
-                ha='center', va='bottom' if height >= 0 else 'top', fontsize=9)
+        # Set color, explicitly set hatch, and set edge color for neighbor bar
+        rects2[i].set_color(bar_color)
+        rects2[i].set_hatch('//') # Re-apply hatch just in case
+        rects2[i].set_edgecolor('black') # Ensure hatch lines are visible
+        
+        # Add legend info if not already seen in this category
+        if color_key not in seen_keys_in_category and color_key in legend_labels:
+            # Use a representative patch for the legend (color only)
+            current_legend_elements.append(Patch(facecolor=bar_color, label=legend_labels[color_key]))
+            seen_keys_in_category.add(color_key)
+            
+    # Add value labels
+    def add_cat_labels(rects, offset=0.01):
+        for rect in rects:
+            height = rect.get_height()
+            ax.text(rect.get_x() + rect.get_width() / 2., 
+                    height + offset if height >= 0 else height - offset, 
+                    f'{height:.3f}', 
+                    ha='center', va='bottom' if height >= 0 else 'top', fontsize=8)
+            
+    add_cat_labels(rects1)
+    add_cat_labels(rects2)
+
+    # Add expected effect text above each pair
+    # Recalculate y-limits after plotting bars and labels
+    y_min, y_max = ax.get_ylim()
+    # Adjust vertical position and font size
+    text_y_position = y_max - (y_max - y_min) * 0.02 # Position text near the top
     
-    # Add legend
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor='lightblue', label='Non-moralized - Non-moralized'),
-        Patch(facecolor='lightgreen', label='Non-moralized - Moralized'),
-        Patch(facecolor='orange', label='Moralized - Non-moralized'),
-        Patch(facecolor='pink', label='Moralized - Moralized')
-    ]
-    ax.legend(handles=legend_elements, loc='best', fontsize=9)
-    
+    for i, effect in enumerate(data['expected_effect']):
+        ax.text(x[i], text_y_position, effect, 
+                 ha='center', va='top', fontsize=6, rotation=0, # Use va='top', smaller font size
+                 bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
+
+    # Increase y-axis limits slightly to make space for text
+    ax.set_ylim(y_min, y_max + (y_max - y_min) * 0.15)
+
     # Set y-axis label
     ax.set_ylabel('Opinion Change', fontsize=12)
+    
+    # Return legend elements specific to this category for global legend creation
+    return current_legend_elements
 
 def plot_trajectory(trajectory_data, output_dir='results/verification/trajectories'):
     """

@@ -134,15 +134,22 @@ class TwoAgentVerification:
         
         # Return focal agent's opinion change and related values
         return {
-            "opinion_change": self.opinions[0] - self.initial_opinions[0],
-            "final_opinion": self.opinions[0],
-            "self_activation": self_activation_values[0],
-            "social_influence": social_influence_values[0]
+            "focal_opinion_change": self.opinions[0] - self.initial_opinions[0],
+            "focal_final_opinion": self.opinions[0],
+            "focal_self_activation": self_activation_values[0],
+            "focal_social_influence": social_influence_values[0],
+            "neighbor_opinion_change": self.opinions[1] - self.initial_opinions[1],
+            "neighbor_final_opinion": self.opinions[1],
+            "neighbor_self_activation": self_activation_values[1],
+            "neighbor_social_influence": social_influence_values[1]
         }
     
     def run_simulation(self, num_steps=1):
         """Run simulation for multiple steps"""
         results_over_time = []
+        
+        # Record initial state for neighbor as well
+        initial_neighbor_opinion = self.initial_opinions[1]
         
         for step_num in range(num_steps):
             step_result = self.step()
@@ -151,10 +158,12 @@ class TwoAgentVerification:
             step_result["step"] = step_num + 1
             results_over_time.append(step_result)
         
-        # Calculate final results
+        # Calculate final results, including neighbor's change
         final_result = {
-            "opinion_change": self.opinions[0] - self.initial_opinions[0],
-            "final_opinion": self.opinions[0],
+            "focal_opinion_change": self.opinions[0] - self.initial_opinions[0],
+            "focal_final_opinion": self.opinions[0],
+            "neighbor_opinion_change": self.opinions[1] - initial_neighbor_opinion,
+            "neighbor_final_opinion": self.opinions[1],
             "num_steps": num_steps,
             "trajectory": np.array(self.opinion_trajectory),
             "self_activation": np.array(self.self_activation_history),
@@ -249,8 +258,10 @@ def run_verification_tests(num_steps=1):
         results.append({
             "rule": rule["name"],
             "expected_effect": rule["expected"],
-            "opinion_change": final_result["opinion_change"],
-            "final_opinion": final_result["final_opinion"],
+            "focal_opinion_change": final_result["focal_opinion_change"],
+            "focal_final_opinion": final_result["focal_final_opinion"],
+            "neighbor_opinion_change": final_result["neighbor_opinion_change"],
+            "neighbor_final_opinion": final_result["neighbor_final_opinion"],
             "focal_op": rule["focal_op"],
             "other_op": rule["other_op"],
             "focal_id": rule["focal_id"],
@@ -282,7 +293,7 @@ def save_verification_results(results, output_dir, trajectory_data=None):
     # Return file path
     return os.path.join(output_dir, 'verification_results.csv')
 
-def main(output_dir='results/verification/agent_interaction_verification', num_steps=10):
+def main(output_dir='results/verification/agent_interaction_verification', num_steps=1):
     """Main function"""
     print("Running agent interaction verification tests...")
     
@@ -290,7 +301,7 @@ def main(output_dir='results/verification/agent_interaction_verification', num_s
     results, trajectory_data = run_verification_tests(num_steps=num_steps)
     
     # Print results
-    print(results[["rule", "expected_effect", "opinion_change", "final_opinion"]])
+    print(results[["rule", "expected_effect", "focal_opinion_change", "neighbor_opinion_change", "focal_final_opinion", "neighbor_final_opinion"]])
     
     # Save results using the provided output directory
     result_path = save_verification_results(results, output_dir, trajectory_data)
