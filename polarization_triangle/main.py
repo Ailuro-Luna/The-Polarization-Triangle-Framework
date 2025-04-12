@@ -65,22 +65,19 @@ def main():
     # Run different tests based on test type
     if args.test_type == "basic":
         print("Running basic simulation...")
-        # Import and run run_basic_simulation from scripts module
-        from polarization_triangle.scripts.run_basic_simulation import run_basic_simulation
-        run_basic_simulation(output_dir=args.output_dir, steps=args.steps)
+        # Use batch_test from experiments module
+        batch_test(output_dir=args.output_dir, steps=args.steps)
         
     elif args.test_type == "morality":
         print(f"Running morality rate test, morality rates: {args.morality_rates}...")
-        # Import and run run_morality_test from scripts module
-        from polarization_triangle.scripts.run_morality_test import run_morality_test
-        run_morality_test(output_dir=args.output_dir, steps=args.steps, 
+        # Use batch_test_morality_rates from experiments module
+        batch_test_morality_rates(output_dir=args.output_dir, steps=args.steps,
                          morality_rates=args.morality_rates)
         
     elif args.test_type == "model-params":
         print("Running model parameters test...")
-        # Import and run run_model_params_test from scripts module
-        from polarization_triangle.scripts.run_model_params_test import run_model_params_test
-        run_model_params_test(output_dir=args.output_dir, steps=args.steps)
+        # Use batch_test_model_params from experiments module
+        batch_test_model_params(output_dir=args.output_dir, steps=args.steps)
         
     elif args.test_type == "activation":
         print("Running activation component analysis...")
@@ -119,8 +116,8 @@ def main():
         def run_agent_interaction_verification():
             from polarization_triangle.verification.agent_interaction_verification import main as agent_verification_main
             output_dir = os.path.join(args.output_dir, "agent_interaction_verification")
-            os.makedirs(output_dir, exist_ok=True)
-            agent_verification_main()
+            # os.makedirs(output_dir, exist_ok=True)
+            agent_verification_main(output_dir=output_dir, num_steps=args.steps)
             
         # Run verification based on type
         if args.verification_type == "alpha":

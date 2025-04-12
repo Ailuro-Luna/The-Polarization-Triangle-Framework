@@ -261,7 +261,7 @@ def run_verification_tests(num_steps=1):
     
     return pd.DataFrame(results), trajectory_data
 
-def save_verification_results(results, trajectory_data=None, output_dir='results/verification/agent_interaction_verification'):
+def save_verification_results(results, output_dir, trajectory_data=None):
     """Save verification results to file"""
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -282,22 +282,22 @@ def save_verification_results(results, trajectory_data=None, output_dir='results
     # Return file path
     return os.path.join(output_dir, 'verification_results.csv')
 
-def main():
+def main(output_dir='results/verification/agent_interaction_verification', num_steps=10):
     """Main function"""
     print("Running agent interaction verification tests...")
     
-    # Run verification tests with 10 steps
-    results, trajectory_data = run_verification_tests(num_steps=10)
+    # Run verification tests with specified steps
+    results, trajectory_data = run_verification_tests(num_steps=num_steps)
     
     # Print results
     print(results[["rule", "expected_effect", "opinion_change", "final_opinion"]])
     
-    # Save results
-    result_path = save_verification_results(results, trajectory_data)
+    # Save results using the provided output directory
+    result_path = save_verification_results(results, output_dir, trajectory_data)
     print(f"Results saved to: {result_path}")
 
     from polarization_triangle.visualization.verification_visualizer import plot_verification_results
-    plot_verification_results(results)
+    plot_verification_results(results, output_dir) 
     
     return results, trajectory_data
 
