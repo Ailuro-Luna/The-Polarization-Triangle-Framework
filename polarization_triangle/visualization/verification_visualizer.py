@@ -196,8 +196,9 @@ def plot_category(ax, data):
                     f'{height:.3f}', 
                     ha='center', va='bottom' if height >= 0 else 'top', fontsize=8)
             
-    add_cat_labels(rects1)
-    add_cat_labels(rects2)
+    # Comment out the calls to remove value labels from category plots
+    # add_cat_labels(rects1)
+    # add_cat_labels(rects2)
 
     # Add expected effect text above each pair
     # Recalculate y-limits after plotting bars and labels
