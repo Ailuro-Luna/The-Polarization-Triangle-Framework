@@ -69,19 +69,76 @@ class AlphaBetaVerification:
         # 存储结果
         self.results = {}
     
-    def measure_polarization(self, opinions: np.ndarray) -> Dict[str, float]:
+    def measure_polarization(self, sim: Simulation) -> Dict[str, float]:
         """
-        计算极化程度的各种指标
+        计算极化程度的各种指标，包括组内和组间方差
         
         参数:
-        opinions -- 所有代理的意见数组
+        sim -- Simulation 对象，包含 agents 的意见和网络信息
         
         返回:
         包含不同极化指标的字典
         """
-        # 方差（总体分散程度）
-        variance = np.var(opinions)
+        opinions = sim.opinions
+        graph = sim.graph
+        num_agents = sim.num_agents
         
+        # 获取社群信息
+        communities = {}
+        agent_community = {}
+        for i in range(num_agents):
+            node_data = graph.nodes[i]
+            # LFR 可能返回一个集合，取最小值作为社群 ID
+            community_id = node_data.get("community")
+            if isinstance(community_id, (set, frozenset)):
+                if not community_id: # 处理空集合的情况
+                    community_id = -1 # 分配到一个特殊的"无社群"组
+                else:
+                    community_id = min(community_id)
+            elif community_id is None: # 处理没有社群属性的情况
+                 community_id = -1 # 分配到一个特殊的"无社群"组
+                 
+            agent_community[i] = community_id
+            if community_id not in communities:
+                communities[community_id] = []
+            communities[community_id].append(i)
+
+        # 计算组内方差 (Intra-community Variance)
+        intra_variances = []
+        weights = []
+        for community_id, agent_indices in communities.items():
+            if len(agent_indices) > 1:
+                community_opinions = opinions[agent_indices]
+                intra_variances.append(np.var(community_opinions))
+                weights.append(len(agent_indices))
+            elif len(agent_indices) == 1: # 单个 agent 的社群方差为 0
+                intra_variances.append(0)
+                weights.append(1)
+        
+        if sum(weights) > 0:
+            weighted_intra_variance = np.average(intra_variances, weights=weights)
+        else:
+            weighted_intra_variance = 0 # 如果没有有效的社群，方差为0
+
+        # 计算组间方差 (Inter-community Variance)
+        community_means = []
+        valid_community_sizes = []
+        for community_id, agent_indices in communities.items():
+             if len(agent_indices) > 0:
+                community_opinions = opinions[agent_indices]
+                community_means.append(np.mean(community_opinions))
+                valid_community_sizes.append(len(agent_indices))
+
+        if len(community_means) > 1:
+            # 计算平均意见的方差，可以考虑按社群大小加权（更精确地反映总体差异）
+            # 这里我们先计算简单方差，如果需要可以改为加权方差
+            inter_variance = np.var(community_means)
+            # 或者使用加权方差：
+            # overall_mean = np.average(community_means, weights=valid_community_sizes)
+            # inter_variance = np.average((community_means - overall_mean)**2, weights=valid_community_sizes)
+        else:
+            inter_variance = 0 # 如果只有一个社群或没有社群，组间方差为 0
+            
         # 双峰指数（使用双峰检测）
         hist, bin_edges = np.histogram(opinions, bins=20, range=(-1, 1))
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
@@ -109,7 +166,8 @@ class AlphaBetaVerification:
         mean_extremity = np.mean(np.abs(opinions))
         
         return {
-            "variance": variance,
+            "intra_community_variance": weighted_intra_variance,
+            "inter_community_variance": inter_variance,
             "bimodality": bimodality,
             "extreme_ratio": extreme_ratio,
             "mean_extremity": mean_extremity
@@ -143,7 +201,7 @@ class AlphaBetaVerification:
             trajectory = run_simulation_with_trajectory(sim, steps=self.config.steps)
             
             # 计算极化指标
-            polarization_metrics = self.measure_polarization(sim.opinions)
+            polarization_metrics = self.measure_polarization(sim)
             all_metrics.append(polarization_metrics)
             
             # 保存最后一次模拟的轨迹（用于可视化）
@@ -209,7 +267,7 @@ class AlphaBetaVerification:
     
     def plot_comparison_results(self):
         """绘制不同alpha和beta组合的极化指标比较图"""
-        metrics_to_plot = ["variance", "bimodality", "extreme_ratio", "mean_extremity"]
+        metrics_to_plot = ["intra_community_variance", "inter_community_variance", "bimodality", "extreme_ratio", "mean_extremity"]
         
         for metric in metrics_to_plot:
             plt.figure(figsize=(10, 8))
@@ -285,11 +343,17 @@ class AlphaBetaVerification:
 def main():
     """主入口函数"""
     # 创建一个用于快速测试的配置
+    # 注意：确保 base_config 使用的网络类型是 'lfr' 或 'community' 
+    # 否则 measure_polarization 中的社群提取会失败或无意义
+    from polarization_triangle.core.config import lfr_config # 确保使用 lfr_config
+    
     test_config = AlphaBetaVerificationConfig(
-        output_dir="verification_results/alphabeta_test",
+        output_dir="verification_results/alphabeta_test_community_variance",
+        base_config=lfr_config, # 明确指定使用 lfr_config
         num_runs=3,  # 每个参数组合只运行3次
-        beta_values=np.linspace(0.1, 2.0, 3).tolist(),  # 只测试3个beta值
-        steps=50  # 只运行50步
+        beta_values=np.linspace(0, 0.2, 3).tolist(),  # 只测试3个beta值
+        steps=50,  # 只运行50步
+        alpha_values=[0.5, 1.0] # 减少 alpha 测试数量以便更快
     )
     verification = AlphaBetaVerification(test_config)
     verification.run()
