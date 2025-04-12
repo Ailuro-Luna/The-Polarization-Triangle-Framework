@@ -45,10 +45,8 @@ def main():
                        help="Minimum alpha value for analysis (used only when verification-type is alpha)")
     parser.add_argument("--alpha-max", type=float, default=2.0,
                        help="Maximum alpha value for analysis (used only when verification-type is alpha)")
-    parser.add_argument("--low-alpha", type=float, default=0.5,
-                       help="Low alpha value for alphabeta analysis")
-    parser.add_argument("--high-alpha", type=float, default=1.5,
-                       help="High alpha value for alphabeta analysis")
+    parser.add_argument("--alpha-values", type=float, nargs="+", default=[0.5, 1.0, 1.5],
+                       help="Alpha values for alphabeta analysis")
     parser.add_argument("--beta-min", type=float, default=0.1,
                        help="Minimum beta value for alphabeta analysis")
     parser.add_argument("--beta-max", type=float, default=2.0,

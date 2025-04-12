@@ -15,8 +15,7 @@ from polarization_triangle.core.config import SimulationConfig, lfr_config
 
 def run_alphabeta_verification(output_dir="results/verification/alphabeta_no_morality", 
                              steps=300, 
-                             low_alpha=0.5, 
-                             high_alpha=1.5,
+                             alpha_values=[0.5, 1.0, 1.5],
                              beta_min=0.1,
                              beta_max=2.0,
                              beta_steps=10,
@@ -28,8 +27,7 @@ def run_alphabeta_verification(output_dir="results/verification/alphabeta_no_mor
     参数:
     output_dir -- 输出目录
     steps -- 模拟步数
-    low_alpha -- 低alpha值
-    high_alpha -- 高alpha值
+    alpha_values -- alpha值列表
     beta_min -- beta最小值
     beta_max -- beta最大值
     beta_steps -- beta步数（测试多少个beta值）
@@ -41,9 +39,7 @@ def run_alphabeta_verification(output_dir="results/verification/alphabeta_no_mor
         output_dir=output_dir,
         base_config=lfr_config,
         steps=steps,
-        low_alpha=low_alpha,
-        mid_alpha_values=[0.9, 1.0, 1.1],
-        high_alpha=high_alpha,
+        alpha_values = alpha_values,
         beta_values=list(np.linspace(beta_min, beta_max, beta_steps)),
         morality_rate=morality_rate,
         num_runs=num_runs
@@ -62,13 +58,11 @@ if __name__ == "__main__":
                         help="Output directory")
     parser.add_argument("--steps", type=int, default=300,
                         help="Number of simulation steps")
-    parser.add_argument("--low-alpha", type=float, default=0.5,
-                        help="Low alpha value")
-    parser.add_argument("--high-alpha", type=float, default=1.5,
-                        help="High alpha value")
-    parser.add_argument("--beta-min", type=float, default=0.1,
+    parser.add_argument("--alpha-values", type=float, nargs="+", default=[0.5, 0.75, 1.0, 1.25, 1.5],
+                        help="Alpha values for alphabeta analysis")
+    parser.add_argument("--beta-min", type=float, default=0,
                         help="Minimum beta value")
-    parser.add_argument("--beta-max", type=float, default=2.0,
+    parser.add_argument("--beta-max", type=float, default=0.2,
                         help="Maximum beta value")
     parser.add_argument("--beta-steps", type=int, default=10,
                         help="Number of beta values to test")
@@ -82,8 +76,7 @@ if __name__ == "__main__":
     run_alphabeta_verification(
         output_dir=args.output_dir,
         steps=args.steps,
-        low_alpha=args.low_alpha,
-        high_alpha=args.high_alpha,
+        alpha_values=args.alpha_values,
         beta_min=args.beta_min,
         beta_max=args.beta_max,
         beta_steps=args.beta_steps,

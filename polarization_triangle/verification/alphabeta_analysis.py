@@ -12,7 +12,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import pandas as pd
 from tqdm import tqdm
 
@@ -35,12 +35,13 @@ class AlphaBetaVerificationConfig:
     output_dir: str = "results/verification/alphabeta"
     base_config: SimulationConfig = None
     steps: int = 300
-    # alpha值设置（低、中、高）
-    low_alpha: float = 0.5
-    mid_alpha_values: List[float] = None  # 默认为[0.9, 1.0, 1.1]
-    high_alpha: float = 1.5
+    # alpha值设置
+    # low_alpha: float = 0.5
+    # mid_alpha_values: List[float] = None  # 默认为[0.9, 1.0, 1.1]
+    # high_alpha: float = 1.5
+    alpha_values: List[float] = field(default_factory=lambda: [0.5, 1.0, 1.5])
     # beta值范围
-    beta_values: List[float] = None  # 默认为从0.1到2.0的范围
+    beta_values: List[float] = None  # 默认为从0到0.2的范围
     # 道德化率
     morality_rate: float = 0.0  # 将道德化率设置为0
     # 每个参数组合的模拟次数
@@ -58,12 +59,9 @@ class AlphaBetaVerification:
         if self.config.base_config is None:
             from polarization_triangle.core.config import lfr_config
             self.config.base_config = lfr_config
-        
-        if self.config.mid_alpha_values is None:
-            self.config.mid_alpha_values = [0.9, 1.0, 1.1]
             
         if self.config.beta_values is None:
-            self.config.beta_values = np.linspace(0.1, 2.0, 10).tolist()
+            self.config.beta_values = np.linspace(0, 0.2, 10).tolist()
         
         # 创建输出目录
         os.makedirs(self.config.output_dir, exist_ok=True)
@@ -168,7 +166,7 @@ class AlphaBetaVerification:
     def run_all_combinations(self):
         """运行所有alpha和beta组合的模拟"""
         # 所有alpha值
-        all_alpha_values = [self.config.low_alpha] + self.config.mid_alpha_values + [self.config.high_alpha]
+        all_alpha_values = self.config.alpha_values
         
         # 运行所有组合的模拟
         for alpha in all_alpha_values:
