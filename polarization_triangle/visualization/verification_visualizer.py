@@ -59,7 +59,7 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     
     for i, effect in enumerate(results['expected_effect']):
         plt.text(x[i], text_y_position, effect, 
-                 ha='center', va='top', fontsize=6.5, rotation=0, # Use va='top', smaller font
+                 ha='center', va='top', fontsize=5, rotation=0, # Use va='top', smaller font
                  bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
 
     plt.legend(loc='upper left')
@@ -208,7 +208,7 @@ def plot_category(ax, data):
     
     for i, effect in enumerate(data['expected_effect']):
         ax.text(x[i], text_y_position, effect, 
-                 ha='center', va='top', fontsize=6, rotation=0, # Use va='top', smaller font size
+                 ha='center', va='top', fontsize=11, rotation=0, # Increased font size from 6.5 to 16
                  bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
 
     # Increase y-axis limits slightly to make space for text

@@ -207,28 +207,28 @@ def run_verification_tests(num_steps=1):
     # Define verification rules
     rules = [
         # Rule 1-4: Same Opinion Direction, Same Identity
-        {"name": "Rule 1", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 0, "expected": "High convergence"},
-        {"name": "Rule 2", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 1, "expected": "Moderate pull toward extremes"},
-        {"name": "Rule 3", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 0, "expected": "Moderate pull of other toward extremes"},
-        {"name": "Rule 4", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 1, "expected": "High polarization"},
+        {"name": "Rule 1", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 0, "expected": "High Convergence"},
+        {"name": "Rule 2", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 1, "expected": "Moderate Radicalize"},
+        {"name": "Rule 3", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 0, "expected": "no change"},
+        {"name": "Rule 4", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 1, "expected": "High Radicalize"},
         
         # Rule 5-8: Same Opinion Direction, Different Identity
-        {"name": "Rule 5", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 0, "expected": "Moderate convergence"},
-        {"name": "Rule 6", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 1, "expected": "Low pull toward extremes"},
-        {"name": "Rule 7", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 0, "expected": "Low pull of other toward extremes"},
-        {"name": "Rule 8", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 1, "expected": "Moderate polarization"},
+        {"name": "Rule 5", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 0, "expected": "Moderate Convergence"},
+        {"name": "Rule 6", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 1, "expected": "Low Radicalize"},
+        {"name": "Rule 7", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 0, "expected": "No Change"},
+        {"name": "Rule 8", "focal_op": 0.25, "other_op": 0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 1, "expected": "Moderate Radicalize"},
         
         # Rule 9-12: Different Opinion Direction, Same Identity
-        {"name": "Rule 9", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 0, "expected": "Very high convergence"},
-        {"name": "Rule 10", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 1, "expected": "Moderate convergence/pull"},
-        {"name": "Rule 11", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 0, "expected": "Low resistance and position holding"},
-        {"name": "Rule 12", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 1, "expected": "Low mutual polarization"},
+        {"name": "Rule 9", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 0, "expected": "Very High Convergence"},
+        {"name": "Rule 10", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 0, "other_m": 1, "expected": "Moderate Convergence"},
+        {"name": "Rule 11", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 0, "expected": "Resist"},
+        {"name": "Rule 12", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": 1, "focal_m": 1, "other_m": 1, "expected": "Low Radicalize"},
         
         # Rule 13-16: Different Opinion Direction, Different Identity
-        {"name": "Rule 13", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 0, "expected": "Low convergence"},
-        {"name": "Rule 14", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 1, "expected": "High pull toward other side"},
-        {"name": "Rule 15", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 0, "expected": "High resistance and movement to extremes"},
-        {"name": "Rule 16", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 1, "expected": "Very high mutual polarization"},
+        {"name": "Rule 13", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 0, "expected": "Low Convergence"},
+        {"name": "Rule 14", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 0, "other_m": 1, "expected": "Moderate Convergence"},
+        {"name": "Rule 15", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 0, "expected": "Resist"},
+        {"name": "Rule 16", "focal_op": 0.25, "other_op": -0.75, "focal_id": 1, "other_id": -1, "focal_m": 1, "other_m": 1, "expected": "Very High Radicalize"},
     ]
     
     # Store results
