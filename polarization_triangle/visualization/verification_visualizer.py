@@ -5,13 +5,14 @@ import os
 from pathlib import Path
 from matplotlib.patches import Patch
 
-def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification'):
+def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification', k=1):
     """
     Plot verification results showing paired opinion changes for focal and neighbor agents.
     
     Parameters:
     results -- DataFrame with verification results including focal and neighbor changes
     output_dir -- Output directory
+    k -- Number of neighbors for each main agent
     """
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -35,7 +36,7 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     
     # Set title and labels
-    plt.title('Agent Interaction Verification: Paired Opinion Changes', fontsize=16)
+    plt.title(f'Agent Interaction Verification: Paired Opinion Changes (k={k} neighbors)', fontsize=16)
     plt.xlabel('Verification Rules', fontsize=14)
     plt.ylabel('Opinion Change', fontsize=14)
     
@@ -61,6 +62,14 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
         plt.text(x[i], text_y_position, effect, 
                  ha='center', va='top', fontsize=5, rotation=0, # Use va='top', smaller font
                  bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
+                 
+        # 添加数值标签在expected effect正下方
+        focal_change = results['focal_opinion_change'].iloc[i]
+        neighbor_change = results['neighbor_opinion_change'].iloc[i]
+        plt.text(x[i], text_y_position - (y_max - y_min) * 0.06, 
+                 f"F: {focal_change:.3f}\nN: {neighbor_change:.3f}", 
+                 ha='center', va='top', fontsize=5, rotation=0,
+                 bbox=dict(boxstyle="round,pad=0.2", fc="lightcyan", alpha=0.6))
 
     plt.legend(loc='upper left')
     
@@ -78,9 +87,9 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     print(f"Paired chart saved to: {plot_path}")
     
     # Create charts grouped by categories
-    plot_by_categories(results, output_dir)
+    plot_by_categories(results, output_dir, k)
 
-def plot_by_categories(results, output_dir):
+def plot_by_categories(results, output_dir, k=1):
     """Plot results grouped by different categories with paired bars"""
     # Group data
     groups = {
@@ -113,7 +122,7 @@ def plot_by_categories(results, output_dir):
                  seen_moralization_keys.add(key)
 
     # Add main title
-    plt.suptitle('Agent Interaction Verification: Paired Opinion Changes by Scenario Category', fontsize=16)
+    plt.suptitle(f'Agent Interaction Verification: Paired Opinion Changes by Scenario Category (k={k} neighbors)', fontsize=16)
     
     # Create separate legends: one for agent type, one for moralization color code
     focal_patch = Patch(facecolor='gray', label='Focal Agent')
@@ -210,6 +219,14 @@ def plot_category(ax, data):
         ax.text(x[i], text_y_position, effect, 
                  ha='center', va='top', fontsize=11, rotation=0, # Increased font size from 6.5 to 16
                  bbox=dict(boxstyle="round,pad=0.2", fc="wheat", alpha=0.6))
+                 
+        # 添加数值标签在expected effect正下方
+        focal_change = data['focal_opinion_change'].iloc[i]
+        neighbor_change = data['neighbor_opinion_change'].iloc[i]
+        ax.text(x[i], text_y_position - (y_max - y_min) * 0.07, 
+                f"F: {focal_change:.3f}\nN: {neighbor_change:.3f}", 
+                ha='center', va='top', fontsize=9, rotation=0,
+                bbox=dict(boxstyle="round,pad=0.2", fc="lightcyan", alpha=0.6))
 
     # Increase y-axis limits slightly to make space for text
     ax.set_ylim(y_min, y_max + (y_max - y_min) * 0.15)
@@ -287,8 +304,15 @@ def plot_trajectory(trajectory_data, output_dir='results/verification/trajectori
     
     print(f"Combined trajectory plot saved to: {os.path.join(output_dir, 'trajectory_all_rules.png')}")
 
-def visualize_from_file(result_file='results/verification/verification_results.csv', trajectory_dir='results/verification/trajectories'):
-    """Load results from file and visualize"""
+def visualize_from_file(result_file='results/verification/verification_results.csv', trajectory_dir='results/verification/trajectories', k=1):
+    """
+    Load results from file and visualize
+    
+    Parameters:
+    result_file -- Path to the results CSV file
+    trajectory_dir -- Directory containing trajectory CSV files
+    k -- Number of neighbors for each main agent
+    """
     # Check if file exists
     if not os.path.exists(result_file):
         print(f"Error: Result file does not exist: {result_file}")
@@ -301,7 +325,7 @@ def visualize_from_file(result_file='results/verification/verification_results.c
     output_dir = os.path.dirname(result_file)
     
     # Plot charts
-    plot_verification_results(results, output_dir)
+    plot_verification_results(results, output_dir, k=k)
     
     # Load and plot trajectories if available
     if os.path.exists(trajectory_dir):
@@ -320,14 +344,23 @@ def main():
     # Default result file path
     result_file = 'results/verification/verification_results.csv'
     trajectory_dir = 'results/verification/trajectories'
+    k = 1  # Default number of neighbors
     
     # Use command line argument if provided
     import sys
     if len(sys.argv) > 1:
         result_file = sys.argv[1]
     
+    # Parse k value if provided as second argument
+    if len(sys.argv) > 2:
+        try:
+            k = int(sys.argv[2])
+            print(f"Using k={k} neighbors per main agent")
+        except ValueError:
+            print(f"Invalid k value: {sys.argv[2]}, using default k=1")
+    
     # Visualize results
-    visualize_from_file(result_file, trajectory_dir)
+    visualize_from_file(result_file, trajectory_dir, k=k)
 
 if __name__ == "__main__":
     main() 

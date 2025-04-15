@@ -7,7 +7,7 @@ import pandas as pd
 import os
 from pathlib import Path
 
-from polarization_triangle.core.config import SimulationConfig, high_polarization_config
+from polarization_triangle.core.config import SimulationConfig, lfr_config
 from polarization_triangle.core.dynamics import (
     calculate_perceived_opinion_func,
     calculate_relationship_coefficient_func,
@@ -28,8 +28,8 @@ class MultiAgentVerification:
         k -- Number of neighbors for each main agent (focal and neighbor)
         config -- Simulation configuration
         """
-        # Use high polarization config
-        self.config = config or high_polarization_config
+        # Use LFR config
+        self.config = config or lfr_config
         
         # Set number of neighbors per main agent
         self.k = k
@@ -616,7 +616,7 @@ def main(k=1, output_dir='results/verification/agent_interaction_verification', 
     print(f"Results saved to: {result_path}")
 
     from polarization_triangle.visualization.verification_visualizer import plot_verification_results
-    plot_verification_results(results, output_dir) 
+    plot_verification_results(results, output_dir, k=k) 
     
     return results, trajectory_data
 
