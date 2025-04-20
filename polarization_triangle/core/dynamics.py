@@ -109,9 +109,9 @@ def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opin
         return -a_ij
     elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
         # 使用传入的同身份平均感知意见值
-        if sigma_ji == 0:  # 避免除零错误
+        if sigma_ij == 0:  # 避免除零错误
             return a_ij
-        return (a_ij / sigma_ji) * same_identity_sigmas
+        return ((a_ij / sigma_ij) * same_identity_sigmas)
     else:
         return a_ij
 

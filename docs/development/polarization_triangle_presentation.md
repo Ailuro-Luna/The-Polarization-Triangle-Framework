@@ -52,7 +52,7 @@ def calculate_perceived_opinion(self, i, j):
 $$A_{ij} = 
 \begin{cases}
 -a_{ij}, & \text{if } l_i = -l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
-\frac{a_{ij}}{\sigma_{ji}} \tilde{\sigma}_{sameIdentity}, & \text{if } l_i = l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
+\frac{a_{ij}}{\sigma_{ij}} \tilde{\sigma}_{sameIdentity}, & \text{if } l_i = l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
 a_{ij}, & \text{otherwise}
 \end{cases}$$
 

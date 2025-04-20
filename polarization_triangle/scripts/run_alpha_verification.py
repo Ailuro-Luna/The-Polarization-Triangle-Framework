@@ -27,8 +27,8 @@ def parse_args():
     parser.add_argument(
         "--alpha-min", 
         type=float, 
-        default=-1.0,
-        help="Minimum value of alpha (default: -1.0)"
+        default=0,
+        help="Minimum value of alpha (default: 0)"
     )
     
     parser.add_argument(

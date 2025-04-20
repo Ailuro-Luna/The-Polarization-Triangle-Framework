@@ -85,16 +85,16 @@ def main():
     # Define commands using python -m to ensure correct module resolution
     executable = sys.executable # Use the same python executable that runs this script
 
-    # 1. Basic Simulation
-    basic_output = base_output_dir / "batch_results"
-    cmd_basic = [
-        executable, "-m", "polarization_triangle.main",
-        "--test-type", "basic",
-        "--output-dir", str(basic_output),
-        "--steps", str(steps)
-    ]
-    success = run_command(cmd_basic, "Basic Simulation")
-    results_summary.append(("Basic Simulation", success))
+    # # 1. Basic Simulation
+    # basic_output = base_output_dir / "batch_results"
+    # cmd_basic = [
+    #     executable, "-m", "polarization_triangle.main",
+    #     "--test-type", "basic",
+    #     "--output-dir", str(basic_output),
+    #     "--steps", str(steps)
+    # ]
+    # success = run_command(cmd_basic, "Basic Simulation")
+    # results_summary.append(("Basic Simulation", success))
 
     # 2. Morality Test
     morality_output = base_output_dir / "morality"
@@ -147,8 +147,8 @@ def main():
         executable, "-m", "polarization_triangle.main",
         "--test-type", "verification", "--verification-type", "alphabeta",
         "--output-dir", str(verification_alphabeta_output.parent), # main expects parent dir
-        "--low-alpha", "0.5", "--high-alpha", "1.0", # Reduced range for testing
-        "--beta-min", "0.5", "--beta-max", "1.5",   # Reduced range for testing
+        # "--low-alpha", "0.5", "--high-alpha", "1.0", # Reduced range for testing
+        # "--beta-min", "0.5", "--beta-max", "1.5",   # Reduced range for testing
         "--beta-steps", str(alphabeta_beta_steps),
         "--morality-rate", "0.3",
         "--num-runs", str(alphabeta_num_runs),
@@ -168,23 +168,23 @@ def main():
     success = run_command(cmd_verify_agent, "Verification - Agent Interaction")
     results_summary.append(("Verification - Agent Interaction", success))
 
-    # 8. Visualization (Optional - Example: AlphaBeta)
-    # Ensure the results directory exists before trying to visualize
-    alphabeta_results_file = verification_alphabeta_output / "alphabeta_results.csv"
-    alphabeta_viz_output_dir = verification_alphabeta_output / "visualizations"
+    # # 8. Visualization (Optional - Example: AlphaBeta)
+    # # Ensure the results directory exists before trying to visualize
+    # alphabeta_results_file = verification_alphabeta_output / "alphabeta_results.csv"
+    # alphabeta_viz_output_dir = verification_alphabeta_output / "visualizations"
 
-    if alphabeta_results_file.exists():
-        cmd_visualize_alphabeta = [
-            executable, "-m", "polarization_triangle.scripts.visualize_alphabeta",
-            "--result-file", str(alphabeta_results_file),
-            "--output-dir", str(alphabeta_viz_output_dir),
-            "--num-runs", str(alphabeta_num_runs)
-        ]
-        success = run_command(cmd_visualize_alphabeta, "Visualize AlphaBeta Results")
-        results_summary.append(("Visualize AlphaBeta Results", success))
-    else:
-        print(f"--- Skipping: Visualize AlphaBeta Results (Results file not found: {alphabeta_results_file}) ---")
-        results_summary.append(("Visualize AlphaBeta Results", "Skipped")) # Mark as skipped
+    # if alphabeta_results_file.exists():
+    #     cmd_visualize_alphabeta = [
+    #         executable, "-m", "polarization_triangle.scripts.visualize_alphabeta",
+    #         "--result-file", str(alphabeta_results_file),
+    #         "--output-dir", str(alphabeta_viz_output_dir),
+    #         "--num-runs", str(alphabeta_num_runs)
+    #     ]
+    #     success = run_command(cmd_visualize_alphabeta, "Visualize AlphaBeta Results")
+    #     results_summary.append(("Visualize AlphaBeta Results", success))
+    # else:
+    #     print(f"--- Skipping: Visualize AlphaBeta Results (Results file not found: {alphabeta_results_file}) ---")
+    #     results_summary.append(("Visualize AlphaBeta Results", "Skipped")) # Mark as skipped
 
 
     print("\n" + "=" * 15 + " Test Summary " + "=" * 15)

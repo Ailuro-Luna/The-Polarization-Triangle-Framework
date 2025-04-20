@@ -56,7 +56,7 @@ def run_simulation_with_rule_tracking(config, steps=500):
     return sim
 
 
-def batch_test(output_dir = "results", steps=100):
+def batch_test(output_dir = "results/batch_results", steps=100):
     base_dir = output_dir
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)

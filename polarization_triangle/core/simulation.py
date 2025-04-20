@@ -18,6 +18,8 @@ class Simulation:
             network_type=config.network_type,
             network_params=config.network_params,
         )
+        # 移除自环
+        self.graph.remove_edges_from(nx.selfloop_edges(self.graph))
         # 处理孤立节点
         handle_isolated_nodes(self.graph)
         # 获取邻接矩阵
@@ -126,7 +128,7 @@ class Simulation:
                     block = self.graph.nodes[i].get("community")
                     if isinstance(block, (set, frozenset)):
                         block = min(block)
-                majority = self.cluster_identity_majority.get(block, 1)
+                majority = self.cluster_identity_majority.get(block, 1 if np.random.rand() < 0.5 else -1)
                 prob = self.config.cluster_identity_prob
                 self.identities[i] = majority if np.random.rand() < prob else -majority
             else:
@@ -176,14 +178,14 @@ class Simulation:
             else:
                 self.opinions[i] = self.generate_opinion(self.identities[i])
 
-        # 应用身份与议题关联的偏移
-        for i in range(self.num_agents):
-            identity = self.identities[i]
-            association = self.identity_issue_mapping.get(identity, 0)
-            # 基于身份与议题关联添加偏移
-            random_factor = np.random.uniform(0.5, 1.0)
-            shift = association * random_factor
-            self.opinions[i] = np.clip(self.opinions[i] + shift, -1, 1)
+        # # 应用身份与议题关联的偏移
+        # for i in range(self.num_agents):
+        #     identity = self.identities[i]
+        #     association = self.identity_issue_mapping.get(identity, 0)
+        #     # 基于身份与议题关联添加偏移
+        #     random_factor = np.random.uniform(0.5, 1.0)
+        #     shift = association * random_factor
+        #     self.opinions[i] = np.clip(self.opinions[i] + shift, -1, 1)
 
     def generate_opinion(self, identity):
         if self.config.extreme_fraction > 0 and np.random.rand() < self.config.extreme_fraction:

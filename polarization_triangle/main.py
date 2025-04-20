@@ -101,8 +101,8 @@ def main():
             run_alphabeta_verification(
                 output_dir=output_dir,
                 steps=args.steps,
-                low_alpha=args.low_alpha,
-                high_alpha=args.high_alpha,
+                # low_alpha=args.low_alpha,
+                # high_alpha=args.high_alpha,
                 beta_min=args.beta_min,
                 beta_max=args.beta_max,
                 beta_steps=args.beta_steps,
