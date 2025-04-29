@@ -35,12 +35,14 @@ class SimulationConfig:
     p_conv_high: float = 0.7
     p_conv_low: float = 0.3
 
-    # 身份与议题关联参数
+    # identity相关参数
     identity_issue_mapping: Dict[int, float] = field(default_factory=lambda: {1: 0.3, -1: -0.3})
     identity_influence_factor: float = 0.2
-    
+    cohesion_factor: float = 0.2
+
     # 身份规范强度参数
     identity_antagonism_threshold: float = 0.8  # 小于1的常数参数A，定义对抗阈值
+
     
     # 极化三角框架模型参数
     delta: float = 1  # 意见衰减率
@@ -48,6 +50,11 @@ class SimulationConfig:
     alpha: float = 0.25  # 自我激活系数
     beta: float = 0.25  # 社会影响系数
     gamma: float = 1  # 道德化影响系数
+    
+    def copy(self):
+        """创建当前配置的副本"""
+        import copy
+        return copy.deepcopy(self)
 
 # 各种预设配置：
 default_config = SimulationConfig()

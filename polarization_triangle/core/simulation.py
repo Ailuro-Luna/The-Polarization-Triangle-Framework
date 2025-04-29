@@ -278,7 +278,8 @@ class Simulation:
             self.gamma,
             self.delta,
             self.u,
-            self.config.influence_factor
+            self.config.influence_factor,
+            self.config.cohesion_factor
         )
         
         # 更新状态

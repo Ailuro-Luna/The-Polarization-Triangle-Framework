@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from matplotlib.patches import Patch
 
-def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification', k=1):
+def plot_verification_results(results, output_dir='results/verification/agent_interaction_verification', k=1, cohesion_factor=None):
     """
     Plot verification results showing paired opinion changes for focal and neighbor agents.
     
@@ -16,6 +16,7 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     """
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
+    
     
     plt.figure(figsize=(20, 10))
     
@@ -36,7 +37,10 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
     
     # Set title and labels
-    plt.title(f'Agent Interaction Verification: Paired Opinion Changes (k={k} neighbors)', fontsize=16)
+    if cohesion_factor is not None:
+        plt.title(f'Agent Interaction Verification: Paired Opinion Changes (k={k} neighbors, cohesion_factor={cohesion_factor})', fontsize=16)
+    else:
+        plt.title(f'Agent Interaction Verification: Paired Opinion Changes (k={k} neighbors)', fontsize=16)
     plt.xlabel('Verification Rules', fontsize=14)
     plt.ylabel('Opinion Change', fontsize=14)
     
@@ -87,9 +91,9 @@ def plot_verification_results(results, output_dir='results/verification/agent_in
     print(f"Paired chart saved to: {plot_path}")
     
     # Create charts grouped by categories
-    plot_by_categories(results, output_dir, k)
+    plot_by_categories(results, output_dir, k, cohesion_factor)
 
-def plot_by_categories(results, output_dir, k=1):
+def plot_by_categories(results, output_dir, k=1, cohesion_factor=None):
     """Plot results grouped by different categories with paired bars"""
     # Group data
     groups = {
@@ -98,6 +102,7 @@ def plot_by_categories(results, output_dir, k=1):
         'Different Opinion, Same Identity': results.iloc[8:12],
         'Different Opinion, Different Identity': results.iloc[12:16]
     }
+    
     
     fig, axs = plt.subplots(2, 2, figsize=(18, 15)) # Slightly taller figure
     axs = axs.flatten()
@@ -122,7 +127,10 @@ def plot_by_categories(results, output_dir, k=1):
                  seen_moralization_keys.add(key)
 
     # Add main title
-    plt.suptitle(f'Agent Interaction Verification: Paired Opinion Changes by Scenario Category (k={k} neighbors)', fontsize=16)
+    if cohesion_factor is not None:
+        plt.suptitle(f'Agent Interaction Verification: Paired Opinion Changes by Scenario Category (k={k} neighbors, cohesion_factor={cohesion_factor})', fontsize=16)
+    else:
+        plt.suptitle(f'Agent Interaction Verification: Paired Opinion Changes by Scenario Category (k={k} neighbors)', fontsize=16)
     
     # Create separate legends: one for agent type, one for moralization color code
     focal_patch = Patch(facecolor='gray', label='Focal Agent')

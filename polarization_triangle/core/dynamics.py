@@ -75,7 +75,7 @@ def calculate_same_identity_sigma_func(opinions, morals, identities, neighbors_i
 
 
 @njit
-def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opinions, i, j, same_identity_sigmas):
+def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opinions, i, j, same_identity_sigmas, cohesion_factor):
     """
     计算agent i与agent j之间的关系系数
     
@@ -99,6 +99,11 @@ def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opin
     l_j = identities[j]
     m_i = morals[i]
     m_j = morals[j]
+
+    if l_i == l_j:
+        cohesion_factor = cohesion_factor
+    else:
+        cohesion_factor = 0
     
     # 计算感知意见
     sigma_ij = calculate_perceived_opinion_func(opinions, morals, i, j)
@@ -106,20 +111,20 @@ def calculate_relationship_coefficient_func(adj_matrix, identities, morals, opin
     
     # 根据极化三角框架公式计算关系系数
     if l_i != l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
-        return -a_ij
+        return -a_ij+cohesion_factor
     elif l_i == l_j and m_i == 1 and m_j == 1 and (sigma_ij * sigma_ji) < 0:
         # 使用传入的同身份平均感知意见值
         if sigma_ij == 0:  # 避免除零错误
-            return a_ij
+            return a_ij+cohesion_factor
         return ((a_ij / sigma_ij) * same_identity_sigmas)
     else:
-        return a_ij
+        return a_ij+cohesion_factor
 
 
 @njit
 def step_calculation(opinions, morals, identities, adj_matrix, 
                     neighbors_indices, neighbors_indptr,  
-                    alpha, beta, gamma, delta, u, influence_factor):
+                    alpha, beta, gamma, delta, u, influence_factor, cohesion_factor):
     """
     执行一步模拟计算，使用numba加速
     
@@ -167,7 +172,8 @@ def step_calculation(opinions, morals, identities, adj_matrix,
                 morals, 
                 opinions, 
                 i, j, 
-                same_identity_sigmas[i]
+                same_identity_sigmas[i],
+                cohesion_factor
             )
             sigma_ij = calculate_perceived_opinion_func(opinions, morals, i, j)
             neighbor_influence += A_ij * sigma_ij

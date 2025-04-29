@@ -107,6 +107,7 @@ class MultiAgentVerification:
         self.alpha = np.ones(self.num_agents) * self.config.alpha  # Self-activation coefficient
         self.beta = self.config.beta  # Social influence coefficient
         self.gamma = np.ones(self.num_agents) * self.config.gamma  # Moralization impact coefficient
+        self.cohesion_factor = self.config.cohesion_factor  # Identity cohesion factor
         
         # Store neighbor lists for each agent
         self.neighbors_list = [[] for _ in range(self.num_agents)]
@@ -148,7 +149,7 @@ class MultiAgentVerification:
         self.self_activation_history = []
         self.social_influence_history = []
         
-        print(f"Model Parameters: delta={self.delta}, u={self.u[0]}, alpha={self.alpha[0]}, beta={self.beta}, gamma={self.gamma[0]}")
+        print(f"Model Parameters: delta={self.delta}, u={self.u[0]}, alpha={self.alpha[0]}, beta={self.beta}, gamma={self.gamma[0]}, cohesion_factor={self.cohesion_factor}")
         if mode == 'separate':
             print(f"Network: 2 main agents + {k} neighbors each = {self.num_agents} total agents (separate neighbors mode)")
         else:
@@ -234,7 +235,8 @@ class MultiAgentVerification:
             self.morals, 
             self.opinions, 
             i, j, 
-            sigma_same_identity
+            sigma_same_identity,
+            self.cohesion_factor
         )
     
     def step(self):
@@ -566,7 +568,7 @@ class MultiAgentVerification:
         print(f"Network visualizations for Rule {rule_name} saved to {viz_dir}")
         return viz_dir
 
-def run_verification_tests(num_steps=1, k=1, mode='separate'):
+def run_verification_tests(num_steps=1, k=1, mode='separate', config=None):
     """
     Run 16 verification rules, return results
     
@@ -574,9 +576,10 @@ def run_verification_tests(num_steps=1, k=1, mode='separate'):
     num_steps -- Number of simulation steps to run
     k -- Number of neighbors for each main agent
     mode -- Neighbor mode: 'separate' or 'shared'
+    config -- Simulation configuration
     """
     # Create verification instance
-    verifier = MultiAgentVerification(k=k, mode=mode)
+    verifier = MultiAgentVerification(k=k, mode=mode, config=config)
     
     # Define verification rules
     rules = [
@@ -686,7 +689,7 @@ def save_verification_results(results, output_dir, trajectory_data=None):
     # Return file path
     return os.path.join(output_dir, 'verification_results.csv')
 
-def main(k=1, output_dir=None, num_steps=1, mode='separate'):
+def main(k=1, output_dir=None, num_steps=1, mode='separate', cohesion_factor=None):
     """
     Main function
     
@@ -695,6 +698,7 @@ def main(k=1, output_dir=None, num_steps=1, mode='separate'):
     output_dir -- Directory to save results (if None, will use a default based on mode)
     num_steps -- Number of simulation steps to run
     mode -- Neighbor mode: 'separate' or 'shared'
+    cohesion_factor -- Cohesion factor value to use (if None, will use default from config)
     """
     # Set default output directory based on mode if not provided
     if output_dir is None:
@@ -705,8 +709,16 @@ def main(k=1, output_dir=None, num_steps=1, mode='separate'):
     else:
         print(f"Running agent interaction verification tests with {2+k}-agent system ({k} shared neighbors) in shared neighbors mode")
     
+    # Create config with custom cohesion_factor if specified
+    config = None
+    if cohesion_factor is not None:
+        from polarization_triangle.core.config import lfr_config
+        config = lfr_config.copy()
+        config.cohesion_factor = cohesion_factor
+        print(f"Using custom cohesion_factor: {cohesion_factor}")
+    
     # Run verification tests with specified steps, neighbors and mode
-    results, trajectory_data = run_verification_tests(num_steps=num_steps, k=k, mode=mode)
+    results, trajectory_data = run_verification_tests(num_steps=num_steps, k=k, mode=mode, config=config)
     
     # Print results
     print(results[["rule", "expected_effect", "focal_opinion_change", "neighbor_opinion_change", "focal_final_opinion", "neighbor_final_opinion"]])
@@ -716,7 +728,7 @@ def main(k=1, output_dir=None, num_steps=1, mode='separate'):
     print(f"Results saved to: {result_path}")
 
     from polarization_triangle.visualization.verification_visualizer import plot_verification_results
-    plot_verification_results(results, output_dir, k=k) 
+    plot_verification_results(results, output_dir, k=k, cohesion_factor=cohesion_factor) 
     
     return results, trajectory_data
 
@@ -726,6 +738,7 @@ if __name__ == "__main__":
     import sys
     k = 1  # default
     mode = 'separate'  # default mode
+    cohesion_factor = None  # default to use config value
     
     # Parse command line arguments
     if len(sys.argv) > 1:
@@ -741,4 +754,11 @@ if __name__ == "__main__":
             print(f"Invalid mode: {mode}, using default mode='separate'")
             mode = 'separate'
     
-    main(k=k, mode=mode) 
+    if len(sys.argv) > 3:
+        try:
+            cohesion_factor = float(sys.argv[3])
+            print(f"Using cohesion_factor={cohesion_factor}")
+        except ValueError:
+            print(f"Invalid cohesion_factor value: {sys.argv[3]}, using default from config")
+    
+    main(k=k, mode=mode, cohesion_factor=cohesion_factor) 

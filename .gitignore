@@ -43,6 +43,11 @@ comparison_results/
 .DS_Store
 Thumbs.db
 desktop.ini 
+
+batch_results/
+results/
+
+
 batch_results/ID_clustered_M_clustered_OP_clustered_op_single_peak_mor_0.2/end_identity.png
 batch_results/ID_clustered_M_clustered_OP_clustered_op_single_peak_mor_0.2/end_morality.png
 batch_results/ID_clustered_M_clustered_OP_clustered_op_single_peak_mor_0.2/end_opinion.png
@@ -13006,3 +13011,6 @@ results/all_tests/verification/alphabeta_verification/visualizations/heatmap_bim
 results/all_tests/verification/alphabeta_verification/visualizations/heatmap_extreme_ratio无道德化.png
 results/all_tests/verification/alphabeta_verification/visualizations/heatmap_mean_extremity无道德化.png
 results/all_tests/verification/alphabeta_verification/visualizations/heatmap_variance无道德化.png
+1-The Polarization Triangle Framework (Not blinded).pdf
+temp.md
+thesis_proposal.pdf
