@@ -103,6 +103,17 @@ def plot_by_categories(results, output_dir, k=1, cohesion_factor=None):
         'Different Opinion, Different Identity': results.iloc[12:16]
     }
     
+    # 计算所有数据的y轴范围
+    all_focal_changes = results['focal_opinion_change']
+    all_neighbor_changes = results['neighbor_opinion_change']
+    all_changes = pd.concat([all_focal_changes, all_neighbor_changes])
+    global_ymin = all_changes.min()
+    global_ymax = all_changes.max()
+    
+    # 为标签和文本留出额外空间
+    y_padding = (global_ymax - global_ymin) * 0.15
+    global_ymin = global_ymin - y_padding * 0.5
+    global_ymax = global_ymax + y_padding
     
     fig, axs = plt.subplots(2, 2, figsize=(18, 15)) # Slightly taller figure
     axs = axs.flatten()
@@ -118,6 +129,9 @@ def plot_by_categories(results, output_dir, k=1, cohesion_factor=None):
         
         ax.set_title(group_name, fontsize=14)
         category_legend = plot_category(ax, data)
+        
+        # 设置统一的y轴范围
+        ax.set_ylim(global_ymin, global_ymax)
         
         # Collect unique legend patches for moralization status
         for handle in category_legend:
@@ -218,7 +232,7 @@ def plot_category(ax, data):
     # add_cat_labels(rects2)
 
     # Add expected effect text above each pair
-    # Recalculate y-limits after plotting bars and labels
+    # 获取当前y轴范围用于定位文本
     y_min, y_max = ax.get_ylim()
     # Adjust vertical position and font size
     text_y_position = y_max - (y_max - y_min) * 0.02 # Position text near the top
@@ -235,9 +249,6 @@ def plot_category(ax, data):
                 f"F: {focal_change:.3f}\nN: {neighbor_change:.3f}", 
                 ha='center', va='top', fontsize=9, rotation=0,
                 bbox=dict(boxstyle="round,pad=0.2", fc="lightcyan", alpha=0.6))
-
-    # Increase y-axis limits slightly to make space for text
-    ax.set_ylim(y_min, y_max + (y_max - y_min) * 0.15)
 
     # Set y-axis label
     ax.set_ylabel('Opinion Change', fontsize=12)
