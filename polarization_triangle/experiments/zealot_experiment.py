@@ -21,60 +21,65 @@ def set_zealot_opinions(sim, zealot_ids):
         sim.opinions[agent_id] = 1.0
 
 
-def initialize_zealots(sim, cluster_zealot_ratio=0.3):
+def initialize_zealots(sim, num_zealots, clustered=False):
     """
-    初始化两种不同的zealot分布:
-    1. 聚类的zealots (从一个随机社区中选择)
-    2. 随机分布的zealots (随机选择相同数量的agents)
+    初始化zealot分布
     
     参数:
     sim -- 原始simulation实例
-    cluster_zealot_ratio -- 选定社区中作为zealot的节点比例
+    num_zealots -- zealot的总数量
+    clustered -- 是否聚类(默认False)
     
     返回:
-    tuple -- (cluster_zealots, random_zealots)，分别是聚类和随机的zealot ID列表
+    list -- zealot的ID列表
     """
-    # 获取社区信息
-    communities = {}
-    for node in sim.graph.nodes():
-        community = sim.graph.nodes[node].get("community")
-        if isinstance(community, (set, frozenset)):
-            community = min(community)
-        if community not in communities:
-            communities[community] = []
-        communities[community].append(node)
+    if num_zealots > sim.num_agents:
+        num_zealots = sim.num_agents
+        print(f"Warning: num_zealots exceeds agent count, setting to {sim.num_agents}")
     
-    # 随机选择一个社区
-    selected_community = np.random.choice(list(communities.keys()))
-    community_nodes = communities[selected_community]
+    zealot_ids = []
     
-    # 计算该社区中要选为zealot的节点数量
-    num_zealots = int(len(community_nodes) * cluster_zealot_ratio)
+    if not clustered:
+        # 随机选择指定数量的agent作为zealot
+        all_nodes = list(range(sim.num_agents))
+        zealot_ids = np.random.choice(all_nodes, size=num_zealots, replace=False).tolist()
+    else:
+        # 获取社区信息
+        communities = {}
+        for node in sim.graph.nodes():
+            community = sim.graph.nodes[node].get("community")
+            if isinstance(community, (set, frozenset)):
+                community = min(community)
+            if community not in communities:
+                communities[community] = []
+            communities[community].append(node)
+        
+        # 按社区大小排序
+        sorted_communities = sorted(communities.items(), key=lambda x: len(x[1]), reverse=True)
+        
+        # 尽量在同一社区内选择zealot
+        zealots_left = num_zealots
+        for community_id, members in sorted_communities:
+            if zealots_left <= 0:
+                break
+            
+            # 决定从当前社区选择多少个zealot
+            to_select = min(zealots_left, len(members))
+            selected = np.random.choice(members, size=to_select, replace=False).tolist()
+            zealot_ids.extend(selected)
+            zealots_left -= to_select
     
-    # 随机选择社区内的zealots
-    cluster_zealots = np.random.choice(community_nodes, size=num_zealots, replace=False).tolist()
-    
-    # 为随机分布创建相同数量的zealots
-    all_nodes = list(range(sim.num_agents))
-    # 计算每个节点成为随机zealot的概率
-    random_zealot_prob = num_zealots / sim.num_agents
-    # 随机选择节点作为zealots
-    random_zealots = []
-    for node in all_nodes:
-        if np.random.random() < random_zealot_prob:
-            random_zealots.append(node)
-    
-    return cluster_zealots, random_zealots
+    return zealot_ids
 
 
-def run_zealot_experiment(steps=500, initial_scale=0.1, cluster_zealot_ratio=0.3, seed=42):
+def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
     
     参数:
     steps -- 模拟步数
     initial_scale -- 初始意见的缩放因子，模拟对新议题的中立态度
-    cluster_zealot_ratio -- 聚类zealot的比例
+    num_zealots -- zealot的总数量
     seed -- 随机数种子
     """
     # 设置随机数种子
@@ -91,7 +96,7 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, cluster_zealot_ratio=0.3
     print(base_config)
     # 设置道德化率
     base_config.morality_rate = 0.5
-
+    
     base_sim = Simulation(base_config)
     
     # 缩放所有代理的初始意见
@@ -101,8 +106,9 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, cluster_zealot_ratio=0.3
     sim_cluster = copy.deepcopy(base_sim)
     sim_random = copy.deepcopy(base_sim)
     
-    # 初始化zealots
-    cluster_zealots, random_zealots = initialize_zealots(base_sim, cluster_zealot_ratio)
+    # 分别初始化聚类和随机zealot
+    cluster_zealots = initialize_zealots(sim_cluster, num_zealots, clustered=True)
+    random_zealots = initialize_zealots(sim_random, num_zealots, clustered=False)
     
     # 创建结果目录
     results_dir = "results/zealot_experiment"
@@ -213,8 +219,8 @@ def draw_zealot_network(sim, zealot_ids, title, filename):
 if __name__ == "__main__":
     # 运行zealot实验
     run_zealot_experiment(
-        steps=1000,             # 运行500步
+        steps=25,            # 运行1000步
         initial_scale=0.1,     # 初始意见缩放到10%
-        cluster_zealot_ratio=1,  # 100%的社区节点将成为zealot
+        num_zealots=100,        # 50个zealot
         seed=42                # 固定随机种子以便重现结果
     ) 
