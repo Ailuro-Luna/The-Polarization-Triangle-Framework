@@ -4,20 +4,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from polarization_triangle.core.simulation import Simulation
 from polarization_triangle.core.config import lfr_config
-from polarization_triangle.visualization import draw_network, draw_opinion_distribution, draw_opinion_distribution_heatmap, draw_opinion_trajectory
-from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory, save_trajectory
-from polarization_triangle.utils.data_manager import save_trajectory_to_csv
-from polarization_triangle.visualization import (
-    draw_network, 
+from polarization_triangle.visualization.network_viz import draw_network
+from polarization_triangle.visualization.opinion_viz import (
     draw_opinion_distribution, 
     draw_opinion_distribution_heatmap,
-    draw_rule_usage,
-    draw_rule_cumulative_usage,
+    draw_opinion_trajectory
+)
+from polarization_triangle.visualization.rule_viz import (
+    draw_interaction_type_usage, 
+    draw_interaction_type_cumulative_usage
+)
+from polarization_triangle.visualization.activation_viz import (
     draw_activation_components,
     draw_activation_history,
     draw_activation_heatmap,
     draw_activation_trajectory
 )
+from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory
+from polarization_triangle.utils.data_manager import save_trajectory_to_csv
 
 
 def override_morality(sim, rate):
@@ -107,18 +111,18 @@ def batch_test(output_dir = "results/batch_results", steps=100):
                         print(f"Saved simulation data to {data_folder}")
 
                         # 添加：绘制规则使用统计图
-                        rule_usage_path = os.path.join(folder_path, "rule_usage.png")
-                        draw_rule_usage(
+                        rule_usage_path = os.path.join(folder_path, "interaction_types.png")
+                        draw_interaction_type_usage(
                             sim.rule_counts_history,
-                            f"Rule Usage over Time\nConfig: {folder_name}",
+                            f"Interaction Types over Time\nConfig: {folder_name}",
                             rule_usage_path
                         )
                         
                         # 添加：绘制规则累积使用统计图
-                        rule_cumulative_path = os.path.join(folder_path, "rule_cumulative_usage.png")
-                        draw_rule_cumulative_usage(
+                        rule_cumulative_path = os.path.join(folder_path, "interaction_types_cumulative.png")
+                        draw_interaction_type_cumulative_usage(
                             sim.rule_counts_history,
-                            f"Cumulative Rule Usage\nConfig: {folder_name}",
+                            f"Cumulative Interaction Types\nConfig: {folder_name}",
                             rule_cumulative_path
                         )
 
@@ -155,7 +159,7 @@ def batch_test(output_dir = "results/batch_results", steps=100):
                                                   end_distribution_path)
                                                   
                         # 输出规则使用统计信息
-                        rule_names = [
+                        interaction_names = [
                             "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
                             "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
                             "Rule 3: Same dir, Same ID, {1,0}, Medium Pull",
@@ -174,19 +178,20 @@ def batch_test(output_dir = "results/batch_results", steps=100):
                             "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
                         ]
                         
-                        # 计算总规则使用次数
-                        rule_counts = np.sum(sim.rule_counts_history, axis=0)
-                        total_count = np.sum(rule_counts)
+                        # 获取交互类型统计
+                        interaction_stats = sim.get_interaction_counts()
+                        counts = interaction_stats["counts"]
+                        total_count = interaction_stats["total_interactions"]
                         
-                        # 将规则使用统计写入文件
-                        stats_path = os.path.join(folder_path, "rule_usage_stats.txt")
+                        # 将交互类型统计写入文件
+                        stats_path = os.path.join(folder_path, "interaction_types_stats.txt")
                         with open(stats_path, "w") as f:
-                            f.write(f"规则使用统计 - 配置: {folder_name}\n")
+                            f.write(f"交互类型统计 - 配置: {folder_name}\n")
                             f.write("-" * 50 + "\n")
-                            for i, rule_name in enumerate(rule_names):
-                                count = rule_counts[i]
+                            for i, interaction_name in enumerate(interaction_names):
+                                count = counts[i]
                                 percent = (count / total_count) * 100 if total_count > 0 else 0
-                                f.write(f"{rule_name}: {count} 次 ({percent:.1f}%)\n")
+                                f.write(f"{interaction_name}: {count} 次 ({percent:.1f}%)\n")
                             f.write("-" * 50 + "\n")
                             f.write(f"总计: {total_count} 次\n")
                         

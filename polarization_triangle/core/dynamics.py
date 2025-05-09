@@ -141,14 +141,19 @@ def step_calculation(opinions, morals, identities, adj_matrix,
     delta -- 意见衰减率
     u -- 意见激活系数
     influence_factor -- 影响因子
+    cohesion_factor -- 身份凝聚力因子
     
     返回:
-    更新后的opinions, self_activation, social_influence
+    更新后的opinions, self_activation, social_influence, interaction_counts
+    interaction_counts -- 16种交互类型的计数，按照规则顺序排列
     """
     num_agents = len(opinions)
     opinion_changes = np.zeros(num_agents, dtype=np.float64)
     self_activation = np.zeros(num_agents, dtype=np.float64)
     social_influence = np.zeros(num_agents, dtype=np.float64)
+    
+    # 创建16种交互类型的计数器
+    interaction_counts = np.zeros(16, dtype=np.int32)
     
     # 预计算所有agent的同身份邻居平均感知意见
     same_identity_sigmas = np.zeros(num_agents, dtype=np.float64)
@@ -166,6 +171,39 @@ def step_calculation(opinions, morals, identities, adj_matrix,
         # 遍历i的所有邻居（使用CSR格式）
         for idx in range(neighbors_indptr[i], neighbors_indptr[i+1]):
             j = neighbors_indices[idx]
+            
+            # 统计交互类型
+            # 判断意见方向是否相同
+            same_opinion_direction = (opinions[i] * opinions[j] >= 0)
+            
+            # 判断身份是否相同
+            same_identity = (identities[i] == identities[j])
+            
+            # 获取道德状态
+            m_i = morals[i]
+            m_j = morals[j]
+            
+            # 计算规则索引 (0-15)
+            # 规则索引构成：
+            # 0-3: 相同意见方向，相同身份 (00, 01, 10, 11)
+            # 4-7: 相同意见方向，不同身份 (00, 01, 10, 11)
+            # 8-11: 不同意见方向，相同身份 (00, 01, 10, 11)
+            # 12-15: 不同意见方向，不同身份 (00, 01, 10, 11)
+            rule_index = 0
+            
+            # 先设置意见方向和身份位
+            if not same_opinion_direction:
+                rule_index += 8
+            if not same_identity:
+                rule_index += 4
+                
+            # 然后设置道德状态位
+            rule_index += m_i * 2 + m_j
+            
+            # 增加对应规则计数
+            interaction_counts[rule_index] += 1
+            
+            # 继续原有的计算逻辑
             A_ij = calculate_relationship_coefficient_func(
                 adj_matrix, 
                 identities, 
@@ -204,4 +242,4 @@ def step_calculation(opinions, morals, identities, adj_matrix,
     # 确保意见值在[-1, 1]范围内
     opinions_new = np.clip(opinions_new, -1, 1)
     
-    return opinions_new, self_activation, social_influence
+    return opinions_new, self_activation, social_influence, interaction_counts

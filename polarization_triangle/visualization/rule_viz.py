@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
+def draw_interaction_type_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
     """
-    绘制规则使用频率随时间的变化图。
+    绘制交互类型频率随时间的变化图。
     
     参数:
-    rule_counts_history -- 包含每个时间步骤规则使用次数的列表，形状为(time_steps, 16)
+    rule_counts_history -- 包含每个时间步骤交互类型次数的列表，形状为(time_steps, 16)
     title -- 图表标题
     filename -- 保存文件名
     smooth -- 是否平滑曲线
@@ -17,21 +17,21 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
     
     # 检查数组是否为空
     if rule_counts.size == 0:
-        print("警告: 规则使用历史记录为空")
+        print("警告: 交互类型历史记录为空")
         return
     
-    # 获取时间步数和规则数量
+    # 获取时间步数和交互类型数量
     time_steps = rule_counts.shape[0]
     num_rules = rule_counts.shape[1] if len(rule_counts.shape) > 1 else 0
     
-    # 如果规则数量不符合预期，打印警告
+    # 如果交互类型数量不符合预期，打印警告
     if num_rules != 16 and num_rules != 8:
-        print(f"警告: 规则数量({num_rules})不是预期的8或16")
+        print(f"警告: 交互类型数量({num_rules})不是预期的8或16")
     
     # 准备时间轴
     time = np.arange(time_steps)
     
-    # 规则名称 - 现在是16种规则
+    # 交互类型名称 - 现在是16种交互类型
     rule_names = [
         "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
         "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
@@ -51,7 +51,7 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
         "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
     ]
     
-    # 如果是旧模式（8种规则），使用旧的规则名称
+    # 如果是旧模式（8种交互类型），使用旧的名称
     if num_rules == 8:
         rule_names = [
             "Rule 1: Same dir, Same ID, Non-moral, Converge",
@@ -64,7 +64,7 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
             "Rule 8: Diff dir, Diff ID, Moral, Polarize"
         ]
     
-    # 设置颜色 - 为16种规则扩展颜色列表
+    # 设置颜色 - 为16种交互类型扩展颜色列表
     colors = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
         '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
@@ -90,7 +90,7 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
             plt.plot(time, rule_counts[:, i], label=rule_names[i], color=colors[i], linewidth=2)
     
     plt.xlabel('Time Step')
-    plt.ylabel('Rule Application Count')
+    plt.ylabel('Interaction Type Count')
     plt.title(title)
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=2)
     plt.grid(True, alpha=0.3)
@@ -100,15 +100,15 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
     plt.savefig(filename)
     plt.close()
 
-    # 额外创建一个堆叠面积图，显示规则使用的比例
+    # 额外创建一个堆叠面积图，显示交互类型的比例
     plt.figure(figsize=(14, 10))
     
-    # 计算每个时间步的规则使用总数
+    # 计算每个时间步的交互类型总数
     total_counts = np.sum(rule_counts, axis=1)
     # 避免除以零
     total_counts = np.where(total_counts == 0, 1, total_counts)
     
-    # 计算规则使用的比例
+    # 计算交互类型的比例
     proportions = rule_counts / total_counts[:, np.newaxis]
     
     # 创建堆叠面积图
@@ -119,7 +119,7 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
                  alpha=0.7)
     
     plt.xlabel('Time Step')
-    plt.ylabel('Rule Application Proportion')
+    plt.ylabel('Interaction Type Proportion')
     plt.title(f"{title} - Proportional Usage")
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=2)
     plt.grid(True, alpha=0.3)
@@ -130,12 +130,12 @@ def draw_rule_usage(rule_counts_history, title, filename, smooth=False, window_s
     plt.savefig(proportion_filename)
     plt.close()
 
-def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
+def draw_interaction_type_cumulative_usage(rule_counts_history, title, filename, smooth=False, window_size=5):
     """
-    绘制规则累积使用次数随时间的变化图。
+    绘制交互类型累积次数随时间的变化图。
     
     参数:
-    rule_counts_history -- 包含每个时间步骤规则使用次数的列表，形状为(time_steps, 16)
+    rule_counts_history -- 包含每个时间步骤交互类型次数的列表，形状为(time_steps, 16)
     title -- 图表标题
     filename -- 保存文件名
     smooth -- 是否平滑曲线
@@ -146,16 +146,16 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
     
     # 检查数组是否为空
     if rule_counts.size == 0:
-        print("警告: 规则使用历史记录为空")
+        print("警告: 交互类型历史记录为空")
         return
     
-    # 获取时间步数和规则数量
+    # 获取时间步数和交互类型数量
     time_steps = rule_counts.shape[0]
     num_rules = rule_counts.shape[1] if len(rule_counts.shape) > 1 else 0
     
-    # 如果规则数量不符合预期，打印警告
+    # 如果交互类型数量不符合预期，打印警告
     if num_rules != 16 and num_rules != 8:
-        print(f"警告: 规则数量({num_rules})不是预期的8或16")
+        print(f"警告: 交互类型数量({num_rules})不是预期的8或16")
     
     # 计算累积次数
     cumulative_counts = np.cumsum(rule_counts, axis=0)
@@ -163,7 +163,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
     # 准备时间轴
     time = np.arange(time_steps)
     
-    # 规则名称 - 现在是16种规则
+    # 交互类型名称 - 现在是16种交互类型
     rule_names = [
         "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
         "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
@@ -183,7 +183,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
         "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
     ]
     
-    # 如果是旧模式（8种规则），使用旧的规则名称
+    # 如果是旧模式（8种交互类型），使用旧的名称
     if num_rules == 8:
         rule_names = [
             "Rule 1: Same dir, Same ID, Non-moral, Converge",
@@ -196,7 +196,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
             "Rule 8: Diff dir, Diff ID, Moral, Polarize"
         ]
     
-    # 设置颜色 - 为16种规则扩展颜色列表
+    # 设置颜色 - 为16种交互类型扩展颜色列表
     colors = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
         '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
@@ -222,7 +222,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
             plt.plot(time, cumulative_counts[:, i], label=rule_names[i], color=colors[i], linewidth=2)
     
     plt.xlabel('Time Step')
-    plt.ylabel('Cumulative Rule Application Count')
+    plt.ylabel('Cumulative Interaction Type Count')
     plt.title(title)
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=2)
     plt.grid(True, alpha=0.3)
@@ -232,7 +232,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
     plt.savefig(filename)
     plt.close()
 
-    # 额外创建一个堆叠面积图，显示规则使用的比例
+    # 额外创建一个堆叠面积图，显示交互类型的比例
     plt.figure(figsize=(14, 10))
     
     # 创建堆叠面积图
@@ -243,7 +243,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
                  alpha=0.7)
     
     plt.xlabel('Time Step')
-    plt.ylabel('Cumulative Rule Application Count')
+    plt.ylabel('Cumulative Interaction Type Count')
     plt.title(f"{title} - Stacked View")
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12), ncol=2)
     plt.grid(True, alpha=0.3)
@@ -253,3 +253,7 @@ def draw_rule_cumulative_usage(rule_counts_history, title, filename, smooth=Fals
     plt.tight_layout()
     plt.savefig(stacked_filename)
     plt.close()
+
+# 为保持向后兼容性，保留原有函数名称
+draw_rule_usage = draw_interaction_type_usage
+draw_rule_cumulative_usage = draw_interaction_type_cumulative_usage

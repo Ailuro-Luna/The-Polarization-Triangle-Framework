@@ -104,11 +104,11 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     base_config.cluster_morality = False
     base_config.cluster_opinion = False
     base_config.opinion_distribution = "uniform"
-    base_config.alpha = 0.5
-    base_config.beta = 0.1
+    base_config.alpha = 0.4
+    base_config.beta = 0.12
     print(base_config)
     # 设置道德化率
-    base_config.morality_rate = 0.5
+    base_config.morality_rate = 0
     
     base_sim = Simulation(base_config)
     
@@ -247,6 +247,6 @@ if __name__ == "__main__":
     run_zealot_experiment(
         steps=100,            # 运行100步
         initial_scale=0.1,     # 初始意见缩放到10%
-        num_zealots=50,        # 50个zealot
+        num_zealots=10,        # 50个zealot
         seed=42                # 固定随机种子以便重现结果
     ) 

@@ -266,7 +266,7 @@ class Simulation:
         self.opinion_trajectory.append(self.opinions.copy())
         
         # 使用numba加速的函数进行主要计算
-        new_opinions, new_self_activation, new_social_influence = step_calculation(
+        new_opinions, new_self_activation, new_social_influence, rule_counts = step_calculation(
             self.opinions,
             self.morals,
             self.identities,
@@ -354,3 +354,50 @@ class Simulation:
 
         from polarization_triangle.utils.data_manager import save_simulation_data
         return save_simulation_data(self, output_dir, prefix) 
+    
+    def get_interaction_counts(self):
+        """
+        获取交互类型的统计信息，包括交互描述
+        
+        返回:
+        字典，包含交互类型计数和描述
+        """
+        # 总计数数组
+        total_counts = np.sum(self.rule_counts_history, axis=0) if len(self.rule_counts_history) > 0 else np.zeros(16)
+        
+        # 交互类型描述
+        interaction_descriptions = [
+            # 相同意见方向，相同身份
+            "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
+            "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
+            "Rule 3: Same dir, Same ID, {1,0}, Medium Pull",
+            "Rule 4: Same dir, Same ID, {1,1}, High Polarization",
+            # 相同意见方向，不同身份
+            "Rule 5: Same dir, Diff ID, {0,0}, Medium Convergence",
+            "Rule 6: Same dir, Diff ID, {0,1}, Low Pull",
+            "Rule 7: Same dir, Diff ID, {1,0}, Low Pull",
+            "Rule 8: Same dir, Diff ID, {1,1}, Medium Polarization",
+            # 不同意见方向，相同身份
+            "Rule 9: Diff dir, Same ID, {0,0}, Very High Convergence",
+            "Rule 10: Diff dir, Same ID, {0,1}, Medium Convergence/Pull",
+            "Rule 11: Diff dir, Same ID, {1,0}, Low Resistance",
+            "Rule 12: Diff dir, Same ID, {1,1}, Low Polarization",
+            # 不同意见方向，不同身份
+            "Rule 13: Diff dir, Diff ID, {0,0}, Low Convergence",
+            "Rule 14: Diff dir, Diff ID, {0,1}, High Pull",
+            "Rule 15: Diff dir, Diff ID, {1,0}, High Resistance",
+            "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
+        ]
+        
+        # 计算总数
+        total_interactions = np.sum(total_counts)
+        
+        # 构建结果字典
+        result = {
+            "total_interactions": total_interactions,
+            "counts": total_counts,
+            "descriptions": interaction_descriptions,
+            "percentages": (total_counts / total_interactions * 100) if total_interactions > 0 else np.zeros(16)
+        }
+        
+        return result 
