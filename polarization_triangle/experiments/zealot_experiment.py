@@ -7,6 +7,17 @@ from polarization_triangle.core.config import SimulationConfig, lfr_config
 from polarization_triangle.core.simulation import Simulation
 from polarization_triangle.visualization.network_viz import draw_network
 from polarization_triangle.visualization.opinion_viz import draw_opinion_distribution_heatmap
+from polarization_triangle.visualization.rule_viz import (
+    draw_interaction_type_usage, 
+    draw_interaction_type_cumulative_usage
+)
+from polarization_triangle.visualization.activation_viz import (
+    draw_activation_components,
+    draw_activation_history,
+    draw_activation_heatmap,
+    draw_activation_trajectory
+)
+from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory
 
 
 def set_zealot_opinions(sim, zealot_ids):
@@ -85,6 +96,128 @@ def initialize_zealots(sim, num_zealots, mode="random"):
     return zealot_ids
 
 
+def generate_rule_usage_plots(sim, title_prefix, output_dir):
+    """
+    生成规则使用统计图
+    
+    参数:
+    sim -- simulation实例
+    title_prefix -- 图表标题前缀
+    output_dir -- 输出目录
+    """
+    # 绘制规则使用统计图
+    rule_usage_path = os.path.join(output_dir, f"{title_prefix}_interaction_types.png")
+    draw_interaction_type_usage(
+        sim.rule_counts_history,
+        f"Interaction Types over Time\n{title_prefix}",
+        rule_usage_path
+    )
+    
+    # 绘制规则累积使用统计图
+    rule_cumulative_path = os.path.join(output_dir, f"{title_prefix}_interaction_types_cumulative.png")
+    draw_interaction_type_cumulative_usage(
+        sim.rule_counts_history,
+        f"Cumulative Interaction Types\n{title_prefix}",
+        rule_cumulative_path
+    )
+    
+    # 输出规则使用统计信息
+    interaction_names = [
+        "Rule 1: Same dir, Same ID, {0,0}, High Convergence",
+        "Rule 2: Same dir, Same ID, {0,1}, Medium Pull",
+        "Rule 3: Same dir, Same ID, {1,0}, Medium Pull",
+        "Rule 4: Same dir, Same ID, {1,1}, High Polarization",
+        "Rule 5: Same dir, Diff ID, {0,0}, Medium Convergence",
+        "Rule 6: Same dir, Diff ID, {0,1}, Low Pull",
+        "Rule 7: Same dir, Diff ID, {1,0}, Low Pull",
+        "Rule 8: Same dir, Diff ID, {1,1}, Medium Polarization",
+        "Rule 9: Diff dir, Same ID, {0,0}, Very High Convergence",
+        "Rule 10: Diff dir, Same ID, {0,1}, Medium Convergence/Pull",
+        "Rule 11: Diff dir, Same ID, {1,0}, Low Resistance",
+        "Rule 12: Diff dir, Same ID, {1,1}, Low Polarization",
+        "Rule 13: Diff dir, Diff ID, {0,0}, Low Convergence",
+        "Rule 14: Diff dir, Diff ID, {0,1}, High Pull",
+        "Rule 15: Diff dir, Diff ID, {1,0}, High Resistance",
+        "Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization"
+    ]
+    
+    # 获取交互类型统计
+    interaction_stats = sim.get_interaction_counts()
+    counts = interaction_stats["counts"]
+    total_count = interaction_stats["total_interactions"]
+    
+    # 将交互类型统计写入文件
+    stats_path = os.path.join(output_dir, f"{title_prefix}_interaction_types_stats.txt")
+    with open(stats_path, "w") as f:
+        f.write(f"交互类型统计 - {title_prefix}\n")
+        f.write("-" * 50 + "\n")
+        for i, interaction_name in enumerate(interaction_names):
+            count = counts[i]
+            percent = (count / total_count) * 100 if total_count > 0 else 0
+            f.write(f"{interaction_name}: {count} 次 ({percent:.1f}%)\n")
+        f.write("-" * 50 + "\n")
+        f.write(f"总计: {total_count} 次\n")
+
+
+def generate_activation_visualizations(sim, trajectory, title_prefix, output_dir):
+    """
+    生成激活组件相关的可视化
+    
+    参数:
+    sim -- simulation实例
+    trajectory -- 意见轨迹数据
+    title_prefix -- 图表标题前缀
+    output_dir -- 输出目录
+    """
+    # 创建激活组件子文件夹
+    activation_folder = os.path.join(output_dir, "activation_components")
+    if not os.path.exists(activation_folder):
+        os.makedirs(activation_folder)
+    
+    # 1. 自我激活和社会影响散点图
+    components_path = os.path.join(activation_folder, f"{title_prefix}_activation_components.png")
+    draw_activation_components(
+        sim,
+        f"Activation Components\n{title_prefix}",
+        components_path
+    )
+    
+    # 2. 自我激活和社会影响随时间的变化
+    history_path = os.path.join(activation_folder, f"{title_prefix}_activation_history.png")
+    draw_activation_history(
+        sim,
+        f"Activation History\n{title_prefix}",
+        history_path
+    )
+    
+    # 3. 自我激活和社会影响的热力图
+    heatmap_path = os.path.join(activation_folder, f"{title_prefix}_activation_heatmap.png")
+    draw_activation_heatmap(
+        sim,
+        f"Activation Heatmap\n{title_prefix}",
+        heatmap_path
+    )
+    
+    # 4. 选定agent的激活轨迹
+    trajectory_path = os.path.join(activation_folder, f"{title_prefix}_activation_trajectory.png")
+    draw_activation_trajectory(
+        sim,
+        trajectory,
+        f"Activation Trajectories\n{title_prefix}",
+        trajectory_path
+    )
+    
+    # 5. 保存激活组件数据到CSV文件
+    components = sim.get_activation_components()
+    data_path = os.path.join(activation_folder, f"{title_prefix}_activation_data.csv")
+    with open(data_path, "w") as f:
+        f.write("agent_id,identity,morality,opinion,self_activation,social_influence,total_activation\n")
+        for i in range(sim.num_agents):
+            f.write(f"{i},{sim.identities[i]},{sim.morals[i]},{sim.opinions[i]:.4f}")
+            f.write(f",{components['self_activation'][i]:.4f},{components['social_influence'][i]:.4f}")
+            f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
+
+
 def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
@@ -129,11 +262,17 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     results_dir = "results/zealot_experiment"
     os.makedirs(results_dir, exist_ok=True)
     
-    # 存储意见历史
+    # 存储意见历史（用于热图）和完整轨迹（用于激活分析）
     base_opinion_history = []
     cluster_opinion_history = []
     random_opinion_history = []
     degree_opinion_history = []
+    
+    # 存储完整轨迹数据
+    base_trajectory = []
+    cluster_trajectory = []
+    random_trajectory = []
+    degree_trajectory = []
     
     # 运行模拟
     for step in range(steps):
@@ -153,6 +292,12 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
         cluster_opinion_history.append(sim_cluster.opinions.copy())
         random_opinion_history.append(sim_random.opinions.copy())
         degree_opinion_history.append(sim_degree.opinions.copy())
+        
+        # 记录完整轨迹
+        base_trajectory.append(base_sim.opinions.copy())
+        cluster_trajectory.append(sim_cluster.opinions.copy())
+        random_trajectory.append(sim_random.opinions.copy())
+        degree_trajectory.append(sim_degree.opinions.copy())
     
     # 生成热图
     draw_opinion_distribution_heatmap(
@@ -187,6 +332,18 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     draw_zealot_network(sim_cluster, cluster_zealots, "Network with Clustered Zealots", f"{results_dir}/cluster_zealot_network.png")
     draw_zealot_network(sim_random, random_zealots, "Network with Random Zealots", f"{results_dir}/random_zealot_network.png")
     draw_zealot_network(sim_degree, degree_zealots, "Network with High-Degree Zealots", f"{results_dir}/degree_zealot_network.png")
+    
+    # 生成规则使用统计图
+    generate_rule_usage_plots(base_sim, "No Zealots", results_dir)
+    generate_rule_usage_plots(sim_cluster, "Clustered Zealots", results_dir)
+    generate_rule_usage_plots(sim_random, "Random Zealots", results_dir)
+    generate_rule_usage_plots(sim_degree, "High-Degree Zealots", results_dir)
+    
+    # 生成激活组件可视化
+    generate_activation_visualizations(base_sim, base_trajectory, "No Zealots", results_dir)
+    generate_activation_visualizations(sim_cluster, cluster_trajectory, "Clustered Zealots", results_dir)
+    generate_activation_visualizations(sim_random, random_trajectory, "Random Zealots", results_dir)
+    generate_activation_visualizations(sim_degree, degree_trajectory, "High-Degree Zealots", results_dir)
 
 
 def draw_zealot_network(sim, zealot_ids, title, filename):
