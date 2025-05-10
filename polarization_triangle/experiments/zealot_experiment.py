@@ -218,6 +218,69 @@ def generate_activation_visualizations(sim, trajectory, title_prefix, output_dir
             f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
 
 
+def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir, steps):
+    """
+    运行单个模拟并生成所有可视化结果
+    
+    参数:
+    sim -- simulation实例
+    zealot_ids -- zealot的ID列表
+    mode_name -- 模式名称
+    results_dir -- 结果输出目录
+    steps -- 模拟步数
+    
+    返回:
+    opinion_history -- 意见历史记录
+    """
+    # 存储意见历史和轨迹
+    opinion_history = []
+    trajectory = []
+    
+    # 运行模拟
+    for _ in range(steps):
+        # 更新zealot的意见
+        if zealot_ids:
+            set_zealot_opinions(sim, zealot_ids)
+        
+        # 执行模拟步骤
+        sim.step()
+        
+        # 记录意见历史和轨迹
+        opinion_history.append(sim.opinions.copy())
+        trajectory.append(sim.opinions.copy())
+    
+    # 生成热图
+    draw_opinion_distribution_heatmap(
+        opinion_history, 
+        f"Opinion Evolution {mode_name}", 
+        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_heatmap.png"
+    )
+    
+    # 绘制网络图 - 意见分布
+    draw_network(
+        sim, 
+        "opinion", 
+        f"Opinion Network {mode_name}", 
+        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_opinion_network.png"
+    )
+    
+    # 绘制zealot网络图
+    draw_zealot_network(
+        sim, 
+        zealot_ids, 
+        f"Network {mode_name}", 
+        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_network.png"
+    )
+    
+    # 生成规则使用统计图
+    generate_rule_usage_plots(sim, mode_name, results_dir)
+    
+    # 生成激活组件可视化
+    generate_activation_visualizations(sim, trajectory, mode_name, results_dir)
+    
+    return opinion_history
+
+
 def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
@@ -262,88 +325,18 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     results_dir = "results/zealot_experiment"
     os.makedirs(results_dir, exist_ok=True)
     
-    # 存储意见历史（用于热图）和完整轨迹（用于激活分析）
-    base_opinion_history = []
-    cluster_opinion_history = []
-    random_opinion_history = []
-    degree_opinion_history = []
+    # 运行各种模式的模拟并生成结果
+    print("Running simulation without zealots...")
+    run_simulation_and_generate_results(base_sim, [], "without Zealots", results_dir, steps)
     
-    # 存储完整轨迹数据
-    base_trajectory = []
-    cluster_trajectory = []
-    random_trajectory = []
-    degree_trajectory = []
+    print("Running simulation with clustered zealots...")
+    run_simulation_and_generate_results(sim_cluster, cluster_zealots, "with Clustered Zealots", results_dir, steps)
     
-    # 运行模拟
-    for step in range(steps):
-        # 更新zealot的意见
-        set_zealot_opinions(sim_cluster, cluster_zealots)
-        set_zealot_opinions(sim_random, random_zealots)
-        set_zealot_opinions(sim_degree, degree_zealots)
-        
-        # 执行模拟步骤
-        base_sim.step()
-        sim_cluster.step()
-        sim_random.step()
-        sim_degree.step()
-        
-        # 记录意见历史
-        base_opinion_history.append(base_sim.opinions.copy())
-        cluster_opinion_history.append(sim_cluster.opinions.copy())
-        random_opinion_history.append(sim_random.opinions.copy())
-        degree_opinion_history.append(sim_degree.opinions.copy())
-        
-        # 记录完整轨迹
-        base_trajectory.append(base_sim.opinions.copy())
-        cluster_trajectory.append(sim_cluster.opinions.copy())
-        random_trajectory.append(sim_random.opinions.copy())
-        degree_trajectory.append(sim_degree.opinions.copy())
+    print("Running simulation with random zealots...")
+    run_simulation_and_generate_results(sim_random, random_zealots, "with Random Zealots", results_dir, steps)
     
-    # 生成热图
-    draw_opinion_distribution_heatmap(
-        base_opinion_history, 
-        "Opinion Evolution without Zealots", 
-        f"{results_dir}/no_zealot_heatmap.png"
-    )
-    draw_opinion_distribution_heatmap(
-        cluster_opinion_history, 
-        "Opinion Evolution with Clustered Zealots", 
-        f"{results_dir}/cluster_zealot_heatmap.png"
-    )
-    draw_opinion_distribution_heatmap(
-        random_opinion_history, 
-        "Opinion Evolution with Random Zealots", 
-        f"{results_dir}/random_zealot_heatmap.png"
-    )
-    draw_opinion_distribution_heatmap(
-        degree_opinion_history, 
-        "Opinion Evolution with High-Degree Zealots", 
-        f"{results_dir}/degree_zealot_heatmap.png"
-    )
-    
-    # 绘制网络图 - 意见分布
-    draw_network(base_sim, "opinion", "Opinion Network without Zealots", f"{results_dir}/no_zealot_opinion_network.png")
-    draw_network(sim_cluster, "opinion", "Opinion Network with Clustered Zealots", f"{results_dir}/cluster_zealot_opinion_network.png")
-    draw_network(sim_random, "opinion", "Opinion Network with Random Zealots", f"{results_dir}/random_zealot_opinion_network.png")
-    draw_network(sim_degree, "opinion", "Opinion Network with High-Degree Zealots", f"{results_dir}/degree_zealot_opinion_network.png")
-    
-    # 绘制zealot网络图 - 在原有网络显示功能基础上创建zealot标记图
-    draw_zealot_network(base_sim, [], "Network without Zealots", f"{results_dir}/no_zealot_network.png")
-    draw_zealot_network(sim_cluster, cluster_zealots, "Network with Clustered Zealots", f"{results_dir}/cluster_zealot_network.png")
-    draw_zealot_network(sim_random, random_zealots, "Network with Random Zealots", f"{results_dir}/random_zealot_network.png")
-    draw_zealot_network(sim_degree, degree_zealots, "Network with High-Degree Zealots", f"{results_dir}/degree_zealot_network.png")
-    
-    # 生成规则使用统计图
-    generate_rule_usage_plots(base_sim, "No Zealots", results_dir)
-    generate_rule_usage_plots(sim_cluster, "Clustered Zealots", results_dir)
-    generate_rule_usage_plots(sim_random, "Random Zealots", results_dir)
-    generate_rule_usage_plots(sim_degree, "High-Degree Zealots", results_dir)
-    
-    # 生成激活组件可视化
-    generate_activation_visualizations(base_sim, base_trajectory, "No Zealots", results_dir)
-    generate_activation_visualizations(sim_cluster, cluster_trajectory, "Clustered Zealots", results_dir)
-    generate_activation_visualizations(sim_random, random_trajectory, "Random Zealots", results_dir)
-    generate_activation_visualizations(sim_degree, degree_trajectory, "High-Degree Zealots", results_dir)
+    print("Running simulation with high-degree zealots...")
+    run_simulation_and_generate_results(sim_degree, degree_zealots, "with High-Degree Zealots", results_dir, steps)
 
 
 def draw_zealot_network(sim, zealot_ids, title, filename):
