@@ -218,6 +218,369 @@ def generate_activation_visualizations(sim, trajectory, title_prefix, output_dir
             f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
 
 
+def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_dir):
+    """
+    计算各种意见统计数据但不绘制图表
+    
+    参数:
+    sim -- simulation实例
+    trajectory -- 意见轨迹数据
+    zealot_ids -- zealot的ID列表
+    mode_name -- 模式名称
+    results_dir -- 结果输出目录
+    
+    返回:
+    dict -- 包含各种统计数据的字典
+    """
+    num_steps = len(trajectory)
+    
+    # 1. 计算平均opinion和平均abs(opinion)
+    mean_opinions = []
+    mean_abs_opinions = []
+    
+    for step_opinions in trajectory:
+        mean_opinions.append(np.mean(step_opinions))
+        mean_abs_opinions.append(np.mean(np.abs(step_opinions)))
+    
+    # 2. 计算除zealot外的所有agent的opinion的方差
+    non_zealot_var = []
+    
+    for step_opinions in trajectory:
+        # 创建除zealot外的所有agent的意见数组
+        non_zealot_opinions = np.delete(step_opinions, zealot_ids) if zealot_ids else step_opinions
+        non_zealot_var.append(np.var(non_zealot_opinions))
+    
+    # 3. 计算所有cluster内部的agent（除了zealot）的opinion的方差
+    # 获取社区信息
+    communities = {}
+    for node in sim.graph.nodes():
+        community = sim.graph.nodes[node].get("community")
+        if isinstance(community, (set, frozenset)):
+            community = min(community)
+        if community not in communities:
+            communities[community] = []
+        communities[community].append(node)
+    
+    cluster_variances = []
+    # 新增：跟踪每个社区的方差历史
+    community_variance_history = {}
+    
+    for step_opinions in trajectory:
+        # 计算每个社区内部的方差，然后取平均值
+        step_cluster_vars = []
+        
+        for community_id, members in communities.items():
+            # 过滤掉zealot
+            community_non_zealots = [m for m in members if m not in zealot_ids]
+            if community_non_zealots:  # 确保社区中有非zealot的成员
+                community_opinions = step_opinions[community_non_zealots]
+                community_var = np.var(community_opinions)
+                step_cluster_vars.append(community_var)
+                
+                # 记录这个社区的方差
+                if community_id not in community_variance_history:
+                    community_variance_history[community_id] = []
+                community_variance_history[community_id].append(community_var)
+            else:
+                # 如果社区内只有zealot，记录0方差
+                if community_id not in community_variance_history:
+                    community_variance_history[community_id] = []
+                community_variance_history[community_id].append(0)
+        
+        # 如果有有效的社区方差，计算平均值
+        if step_cluster_vars:
+            cluster_variances.append(np.mean(step_cluster_vars))
+        else:
+            cluster_variances.append(0)
+    
+    # 4. 统计持有negative opinion的个体的个数和negative opinion的均值
+    # 5. 统计持有positive opinion的个体的个数和positive opinion的均值
+    negative_counts = []
+    negative_means = []
+    positive_counts = []
+    positive_means = []
+    
+    for step_opinions in trajectory:
+        # 获取非zealot的意见
+        non_zealot_opinions = np.delete(step_opinions, zealot_ids) if zealot_ids else step_opinions
+        
+        # 统计负面意见
+        negative_mask = non_zealot_opinions < 0
+        negative_opinions = non_zealot_opinions[negative_mask]
+        negative_count = len(negative_opinions)
+        negative_counts.append(negative_count)
+        negative_means.append(np.mean(negative_opinions) if negative_count > 0 else 0)
+        
+        # 统计正面意见
+        positive_mask = non_zealot_opinions > 0
+        positive_opinions = non_zealot_opinions[positive_mask]
+        positive_count = len(positive_opinions)
+        positive_counts.append(positive_count)
+        positive_means.append(np.mean(positive_opinions) if positive_count > 0 else 0)
+    
+    # 整合所有统计数据
+    stats = {
+        "mean_opinions": mean_opinions,
+        "mean_abs_opinions": mean_abs_opinions,
+        "non_zealot_variance": non_zealot_var,
+        "cluster_variance": cluster_variances,
+        "negative_counts": negative_counts,
+        "negative_means": negative_means,
+        "positive_counts": positive_counts,
+        "positive_means": positive_means,
+        "community_variance_history": community_variance_history,
+        "communities": communities
+    }
+    
+    # 单独保存每个模式的统计数据到CSV文件
+    stats_dir = os.path.join(results_dir, "statistics")
+    if not os.path.exists(stats_dir):
+        os.makedirs(stats_dir)
+        
+    file_prefix = mode_name.lower().replace(' ', '_')
+    stats_csv = os.path.join(stats_dir, f"{file_prefix}_opinion_stats.csv")
+    with open(stats_csv, "w") as f:
+        f.write("step,mean_opinion,mean_abs_opinion,non_zealot_variance,cluster_variance,")
+        f.write("negative_count,negative_mean,positive_count,positive_mean\n")
+        
+        for step in range(num_steps):
+            f.write(f"{step},{mean_opinions[step]:.4f},{mean_abs_opinions[step]:.4f},")
+            f.write(f"{non_zealot_var[step]:.4f},{cluster_variances[step]:.4f},")
+            f.write(f"{negative_counts[step]},{negative_means[step]:.4f},")
+            f.write(f"{positive_counts[step]},{positive_means[step]:.4f}\n")
+    
+    # 保存每个社区的方差数据到单独的CSV文件
+    community_csv = os.path.join(stats_dir, f"{file_prefix}_community_variances.csv")
+    with open(community_csv, "w") as f:
+        # 写入标题行
+        f.write("step")
+        for community_id in sorted(community_variance_history.keys()):
+            f.write(f",community_{community_id}")
+        f.write("\n")
+        
+        # 写入数据
+        for step in range(num_steps):
+            f.write(f"{step}")
+            for community_id in sorted(community_variance_history.keys()):
+                if step < len(community_variance_history[community_id]):
+                    f.write(f",{community_variance_history[community_id][step]:.4f}")
+                else:
+                    f.write(",0.0000")  # 防止索引越界
+            f.write("\n")
+    
+    return stats
+
+
+def plot_community_variances(stats, mode_name, results_dir):
+    """
+    绘制每个社区的意见方差变化图
+    
+    参数:
+    stats -- 统计数据字典
+    mode_name -- 模式名称
+    results_dir -- 结果输出目录
+    """
+    # 确保统计目录存在
+    stats_dir = os.path.join(results_dir, "statistics")
+    if not os.path.exists(stats_dir):
+        os.makedirs(stats_dir)
+    
+    file_prefix = mode_name.lower().replace(' ', '_')
+    community_variance_history = stats["community_variance_history"]
+    communities = stats["communities"]
+    
+    # 如果社区太多，可能图会很乱，所以限制只显示大的社区
+    # 计算每个社区的大小
+    community_sizes = {comm_id: len(members) for comm_id, members in communities.items()}
+    
+    # 按大小排序社区
+    sorted_communities = sorted(community_sizes.items(), key=lambda x: x[1], reverse=True)
+    
+    # 选取前10个最大的社区（或者全部，如果不足10个）
+    top_communities = [comm_id for comm_id, size in sorted_communities[:min(10, len(sorted_communities))]]
+    
+    # 绘制社区方差图
+    plt.figure(figsize=(12, 8))
+    
+    # 使用不同颜色和线型
+    colors = plt.cm.tab10(np.linspace(0, 1, len(top_communities)))
+    linestyles = ['-', '--', '-.', ':'] * 3  # 重复几次以确保有足够的线型
+    
+    for i, community_id in enumerate(top_communities):
+        variance_history = community_variance_history[community_id]
+        community_size = community_sizes[community_id]
+        plt.plot(range(len(variance_history)), variance_history, 
+                label=f'Community {community_id} (size: {community_size})', 
+                color=colors[i], linestyle=linestyles[i % len(linestyles)])
+    
+    plt.xlabel('Step')
+    plt.ylabel('Variance')
+    plt.title(f'Opinion Variance within Each Community (Excluding Zealots)\n{mode_name}')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(stats_dir, f"{file_prefix}_community_variances.png"), dpi=300)
+    plt.close()
+
+
+def plot_comparative_statistics(all_stats, mode_names, results_dir):
+    """
+    绘制比较性统计图表，将不同模式的统计数据在同一张图上显示
+    
+    参数:
+    all_stats -- 包含不同模式统计数据的字典
+    mode_names -- 不同模式的名称列表
+    results_dir -- 结果输出目录
+    """
+    # 确保统计目录存在
+    stats_dir = os.path.join(results_dir, "statistics")
+    if not os.path.exists(stats_dir):
+        os.makedirs(stats_dir)
+    
+    num_steps = len(all_stats[mode_names[0]]["mean_opinions"])
+    steps = range(num_steps)
+    
+    # 使用不同颜色和线型
+    colors = ['blue', 'red', 'green', 'purple']
+    linestyles = ['-', '--', '-.', ':']
+    
+    # 1. 绘制平均意见值对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["mean_opinions"], 
+                label=f'{mode} - Mean Opinion', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Mean Opinion')
+    plt.title('Comparison of Mean Opinions across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_mean_opinions.png"), dpi=300)
+    plt.close()
+    
+    # 2. 绘制平均绝对意见值对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["mean_abs_opinions"], 
+                label=f'{mode} - Mean |Opinion|', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Mean |Opinion|')
+    plt.title('Comparison of Mean Absolute Opinions across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_mean_abs_opinions.png"), dpi=300)
+    plt.close()
+    
+    # 3. 绘制非zealot方差对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["non_zealot_variance"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Variance')
+    plt.title('Comparison of Opinion Variance (Excluding Zealots) across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_non_zealot_variance.png"), dpi=300)
+    plt.close()
+    
+    # 4. 绘制社区内部方差对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["cluster_variance"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Mean Intra-Cluster Variance')
+    plt.title('Comparison of Mean Opinion Variance within Clusters across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_cluster_variance.png"), dpi=300)
+    plt.close()
+    
+    # 5. 绘制负面意见数量对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["negative_counts"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Count')
+    plt.title('Comparison of Negative Opinion Counts across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_negative_counts.png"), dpi=300)
+    plt.close()
+    
+    # 6. 绘制负面意见均值对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["negative_means"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Mean Value')
+    plt.title('Comparison of Negative Opinion Means across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_negative_means.png"), dpi=300)
+    plt.close()
+    
+    # 7. 绘制正面意见数量对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["positive_counts"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Count')
+    plt.title('Comparison of Positive Opinion Counts across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_positive_counts.png"), dpi=300)
+    plt.close()
+    
+    # 8. 绘制正面意见均值对比图
+    plt.figure(figsize=(12, 7))
+    for i, mode in enumerate(mode_names):
+        plt.plot(steps, all_stats[mode]["positive_means"], 
+                label=f'{mode}', 
+                color=colors[i], linestyle='-')
+    plt.xlabel('Step')
+    plt.ylabel('Mean Value')
+    plt.title('Comparison of Positive Opinion Means across Different Simulations')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(stats_dir, "comparison_positive_means.png"), dpi=300)
+    plt.close()
+    
+    # 9. 保存组合数据到CSV文件
+    stats_csv = os.path.join(stats_dir, "comparison_opinion_stats.csv")
+    with open(stats_csv, "w") as f:
+        # 写入标题行
+        f.write("step")
+        for mode in mode_names:
+            f.write(f",{mode}_mean_opinion,{mode}_mean_abs_opinion,{mode}_non_zealot_variance,{mode}_cluster_variance")
+            f.write(f",{mode}_negative_count,{mode}_negative_mean,{mode}_positive_count,{mode}_positive_mean")
+        f.write("\n")
+        
+        # 写入数据
+        for step in range(num_steps):
+            f.write(f"{step}")
+            for mode in mode_names:
+                f.write(f",{all_stats[mode]['mean_opinions'][step]:.4f}")
+                f.write(f",{all_stats[mode]['mean_abs_opinions'][step]:.4f}")
+                f.write(f",{all_stats[mode]['non_zealot_variance'][step]:.4f}")
+                f.write(f",{all_stats[mode]['cluster_variance'][step]:.4f}")
+                f.write(f",{all_stats[mode]['negative_counts'][step]}")
+                f.write(f",{all_stats[mode]['negative_means'][step]:.4f}")
+                f.write(f",{all_stats[mode]['positive_counts'][step]}")
+                f.write(f",{all_stats[mode]['positive_means'][step]:.4f}")
+            f.write("\n")
+
+
 def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir, steps):
     """
     运行单个模拟并生成所有可视化结果
@@ -230,7 +593,7 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     steps -- 模拟步数
     
     返回:
-    opinion_history -- 意见历史记录
+    dict -- 包含意见历史记录和统计数据的字典
     """
     # 存储意见历史和轨迹
     opinion_history = []
@@ -278,7 +641,16 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     # 生成激活组件可视化
     generate_activation_visualizations(sim, trajectory, mode_name, results_dir)
     
-    return opinion_history
+    # 计算意见统计数据
+    stats = generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_dir)
+    
+    # 绘制社区方差图
+    plot_community_variances(stats, mode_name, results_dir)
+    
+    return {
+        "opinion_history": opinion_history,
+        "stats": stats
+    }
 
 
 def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42):
@@ -327,16 +699,30 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     
     # 运行各种模式的模拟并生成结果
     print("Running simulation without zealots...")
-    run_simulation_and_generate_results(base_sim, [], "without Zealots", results_dir, steps)
+    no_zealot_results = run_simulation_and_generate_results(base_sim, [], "without Zealots", results_dir, steps)
     
     print("Running simulation with clustered zealots...")
-    run_simulation_and_generate_results(sim_cluster, cluster_zealots, "with Clustered Zealots", results_dir, steps)
+    cluster_zealot_results = run_simulation_and_generate_results(sim_cluster, cluster_zealots, "with Clustered Zealots", results_dir, steps)
     
     print("Running simulation with random zealots...")
-    run_simulation_and_generate_results(sim_random, random_zealots, "with Random Zealots", results_dir, steps)
+    random_zealot_results = run_simulation_and_generate_results(sim_random, random_zealots, "with Random Zealots", results_dir, steps)
     
     print("Running simulation with high-degree zealots...")
-    run_simulation_and_generate_results(sim_degree, degree_zealots, "with High-Degree Zealots", results_dir, steps)
+    degree_zealot_results = run_simulation_and_generate_results(sim_degree, degree_zealots, "with High-Degree Zealots", results_dir, steps)
+    
+    # 收集所有模式的统计数据
+    all_stats = {
+        "without Zealots": no_zealot_results["stats"],
+        "with Clustered Zealots": cluster_zealot_results["stats"],
+        "with Random Zealots": random_zealot_results["stats"],
+        "with High-Degree Zealots": degree_zealot_results["stats"]
+    }
+    
+    # 绘制比较统计图
+    mode_names = ["without Zealots", "with Clustered Zealots", "with Random Zealots", "with High-Degree Zealots"]
+    print("Generating comparative statistics plots...")
+    plot_comparative_statistics(all_stats, mode_names, results_dir)
+    print("All simulations and visualizations completed.")
 
 
 def draw_zealot_network(sim, zealot_ids, title, filename):
@@ -395,8 +781,8 @@ def draw_zealot_network(sim, zealot_ids, title, filename):
 if __name__ == "__main__":
     # 运行zealot实验
     run_zealot_experiment(
-        steps=100,            # 运行100步
+        steps=500,            # 运行500步
         initial_scale=0.1,     # 初始意见缩放到10%
         num_zealots=10,        # 50个zealot
-        seed=42                # 固定随机种子以便重现结果
+        seed=114514                # 固定随机种子以便重现结果
     ) 
