@@ -5,6 +5,7 @@ from tqdm import tqdm
 import copy
 import random
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
+from polarization_triangle.visualization.opinion_viz import draw_opinion_distribution_heatmap
 
 def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealots=50, base_seed=42):
     """
@@ -51,6 +52,9 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
     # 收集每次运行的统计数据
     all_stats = {mode: [] for mode in mode_names}
     
+    # 收集每次运行的意见历史，用于生成平均热图
+    all_opinion_histories = {mode: [] for mode in mode_names}
+    
     for i in tqdm(range(runs), desc="Running experiments"):
         # 为每次运行使用不同的随机种子
         current_seed = base_seed + i
@@ -68,9 +72,10 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
         # 收集结果
         run_results.append(result)
         
-        # 收集统计数据
+        # 收集统计数据和意见历史
         for mode in mode_names:
             all_stats[mode].append(result[mode]["stats"])
+            all_opinion_histories[mode].append(result[mode]["opinion_history"])
     
     # 计算平均统计数据
     avg_stats = {}
@@ -79,6 +84,9 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
     
     # 绘制平均统计图表
     plot_average_statistics(avg_stats, mode_names, avg_dir, steps)
+    
+    # 生成平均热图
+    generate_average_heatmaps(all_opinion_histories, mode_names, avg_dir)
     
     print(f"\nMulti-zealot experiment completed. Average results saved to {avg_dir}")
     return avg_stats
@@ -126,6 +134,78 @@ def average_stats(stats_list):
             avg_stats[key] = avg_stats[key] / n
     
     return avg_stats
+
+
+def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir):
+    """
+    生成平均意见分布热图
+    
+    参数:
+    all_opinion_histories -- 包含所有运行的意见历史的字典
+    mode_names -- 模式名称列表
+    output_dir -- 输出目录
+    """
+    print("Generating average heatmaps...")
+    
+    # 确保输出目录存在
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    for mode in mode_names:
+        # 获取该模式的所有意见历史
+        mode_histories = all_opinion_histories[mode]
+        
+        if not mode_histories:
+            continue
+        
+        # 计算平均意见历史
+        avg_history = calculate_average_opinion_history(mode_histories)
+        
+        # 绘制平均热图
+        heatmap_file = os.path.join(output_dir, f"avg_{mode.lower().replace(' ', '_')}_heatmap.png")
+        draw_opinion_distribution_heatmap(
+            avg_history,
+            f"Average Opinion Evolution {mode} (Multiple Runs)",
+            heatmap_file,
+            bins=40,
+            log_scale=True
+        )
+
+
+def calculate_average_opinion_history(opinion_histories):
+    """
+    计算多次运行的平均意见历史
+    
+    参数:
+    opinion_histories -- 包含多次运行意见历史的列表
+    
+    返回:
+    list -- 平均意见历史
+    """
+    if not opinion_histories:
+        return []
+    
+    # 获取第一个历史的时间步长和智能体数量
+    num_steps = len(opinion_histories[0])
+    num_agents = len(opinion_histories[0][0])
+    
+    # 初始化平均意见历史
+    avg_history = []
+    
+    # 对每个时间步骤计算平均值
+    for step in range(num_steps):
+        # 收集所有运行在该时间步的意见
+        step_opinions = np.zeros((len(opinion_histories), num_agents))
+        
+        for run_idx, history in enumerate(opinion_histories):
+            if step < len(history):  # 确保该运行有足够的步骤
+                step_opinions[run_idx] = history[step]
+        
+        # 计算平均意见
+        avg_step_opinions = np.mean(step_opinions, axis=0)
+        avg_history.append(avg_step_opinions)
+    
+    return avg_history
 
 
 def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
@@ -287,10 +367,10 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
 
 
 if __name__ == "__main__":
-    # 运行多次zealot实验，默认10次
+    # 运行多次zealot实验
     run_multi_zealot_experiment(
-        runs=10,               # 运行10次实验
-        steps=100,            # 每次运行100步
+        runs=20,               # 运行20次实验
+        steps=100,            # 每次运行500步
         initial_scale=0.1,    # 初始意见缩放到10%
         num_zealots=10,       # 10个zealot
         base_seed=42          # 基础随机种子
