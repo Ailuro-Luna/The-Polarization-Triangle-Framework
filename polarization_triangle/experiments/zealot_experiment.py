@@ -653,7 +653,7 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     }
 
 
-def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42):
+def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=114514, output_dir=None):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
     
@@ -662,6 +662,10 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     initial_scale -- 初始意见的缩放因子，模拟对新议题的中立态度
     num_zealots -- zealot的总数量
     seed -- 随机数种子
+    output_dir -- 结果输出目录（如果为None，则使用默认目录）
+    
+    返回:
+    dict -- 包含所有模式结果的字典
     """
     # 设置随机数种子
     np.random.seed(seed)
@@ -694,7 +698,10 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     degree_zealots = initialize_zealots(sim_degree, num_zealots, mode="degree")
     
     # 创建结果目录
-    results_dir = "results/zealot_experiment"
+    if output_dir is None:
+        results_dir = "results/zealot_experiment"
+    else:
+        results_dir = output_dir
     os.makedirs(results_dir, exist_ok=True)
     
     # 运行各种模式的模拟并生成结果
@@ -723,6 +730,14 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=42)
     print("Generating comparative statistics plots...")
     plot_comparative_statistics(all_stats, mode_names, results_dir)
     print("All simulations and visualizations completed.")
+    
+    # 返回所有结果
+    return {
+        "without Zealots": no_zealot_results,
+        "with Clustered Zealots": cluster_zealot_results,
+        "with Random Zealots": random_zealot_results,
+        "with High-Degree Zealots": degree_zealot_results
+    }
 
 
 def draw_zealot_network(sim, zealot_ids, title, filename):
