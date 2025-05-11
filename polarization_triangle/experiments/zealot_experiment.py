@@ -653,7 +653,17 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     }
 
 
-def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=114514, output_dir=None):
+def run_zealot_experiment(
+    steps=500, 
+    initial_scale=0.1, 
+    num_zealots=50, 
+    seed=42, 
+    output_dir=None, 
+    morality_rate=0.0, 
+    zealot_morality=False, 
+    identity_clustered=False,
+    zealot_mode=None
+):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
     
@@ -663,6 +673,10 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=114
     num_zealots -- zealot的总数量
     seed -- 随机数种子
     output_dir -- 结果输出目录（如果为None，则使用默认目录）
+    morality_rate -- moralizing的non-zealot people的比例
+    zealot_morality -- zealot是否全部moralizing
+    identity_clustered -- 是否按identity进行clustered的初始化
+    zealot_mode -- zealot的初始化配置 ("none", "clustered", "random", "high-degree")，若为None则运行所有模式
     
     返回:
     dict -- 包含所有模式结果的字典
@@ -672,30 +686,63 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=114
     
     # 创建基础模拟实例
     base_config = copy.deepcopy(lfr_config)
-    base_config.cluster_identity = False
-    base_config.cluster_morality = False
+    base_config.cluster_identity = identity_clustered
+    base_config.cluster_morality = False  # 暂时不集群morality
     base_config.cluster_opinion = False
     base_config.opinion_distribution = "uniform"
     base_config.alpha = 0.4
     base_config.beta = 0.12
     print(base_config)
     # 设置道德化率
-    base_config.morality_rate = 0
+    base_config.morality_rate = morality_rate
     
     base_sim = Simulation(base_config)
     
     # 缩放所有代理的初始意见
     base_sim.opinions *= initial_scale
     
-    # 创建三个副本用于不同的zealot分布
-    sim_cluster = copy.deepcopy(base_sim)
-    sim_random = copy.deepcopy(base_sim)
-    sim_degree = copy.deepcopy(base_sim)
+    # 根据zealot_mode决定运行哪些模式
+    run_all_modes = zealot_mode is None
+    modes_to_run = []
     
-    # 分别初始化三种不同模式的zealot
-    cluster_zealots = initialize_zealots(sim_cluster, num_zealots, mode="clustered")
-    random_zealots = initialize_zealots(sim_random, num_zealots, mode="random")
-    degree_zealots = initialize_zealots(sim_degree, num_zealots, mode="degree")
+    if run_all_modes or zealot_mode == "none":
+        modes_to_run.append("none")
+    if run_all_modes or zealot_mode == "clustered":
+        modes_to_run.append("clustered")
+    if run_all_modes or zealot_mode == "random":
+        modes_to_run.append("random")
+    if run_all_modes or zealot_mode == "high-degree":
+        modes_to_run.append("high-degree")
+    
+    # 创建副本用于不同的zealot分布
+    sims = {}
+    zealots = {}
+    
+    # 对于无zealot模式，使用base_sim
+    if "none" in modes_to_run:
+        sims["none"] = base_sim
+        zealots["none"] = []
+    
+    # 对于其他模式，创建副本
+    if "clustered" in modes_to_run:
+        sims["clustered"] = copy.deepcopy(base_sim)
+        zealots["clustered"] = initialize_zealots(sims["clustered"], num_zealots, mode="clustered")
+    
+    if "random" in modes_to_run:
+        sims["random"] = copy.deepcopy(base_sim)
+        zealots["random"] = initialize_zealots(sims["random"], num_zealots, mode="random")
+    
+    if "high-degree" in modes_to_run:
+        sims["high-degree"] = copy.deepcopy(base_sim)
+        zealots["high-degree"] = initialize_zealots(sims["high-degree"], num_zealots, mode="degree")
+    
+    # 如果zealot_morality为True，将所有zealot的morality设为1
+    if zealot_morality:
+        for mode, zealot_list in zealots.items():
+            if mode == "none":
+                continue  # 无zealot模式跳过
+            for agent_id in zealot_list:
+                sims[mode].morals[agent_id] = 1
     
     # 创建结果目录
     if output_dir is None:
@@ -705,39 +752,47 @@ def run_zealot_experiment(steps=500, initial_scale=0.1, num_zealots=50, seed=114
     os.makedirs(results_dir, exist_ok=True)
     
     # 运行各种模式的模拟并生成结果
-    print("Running simulation without zealots...")
-    no_zealot_results = run_simulation_and_generate_results(base_sim, [], "without Zealots", results_dir, steps)
+    results = {}
     
-    print("Running simulation with clustered zealots...")
-    cluster_zealot_results = run_simulation_and_generate_results(sim_cluster, cluster_zealots, "with Clustered Zealots", results_dir, steps)
+    if "none" in modes_to_run:
+        print("Running simulation without zealots...")
+        results["without Zealots"] = run_simulation_and_generate_results(
+            sims["none"], [], "without Zealots", results_dir, steps
+        )
     
-    print("Running simulation with random zealots...")
-    random_zealot_results = run_simulation_and_generate_results(sim_random, random_zealots, "with Random Zealots", results_dir, steps)
+    if "clustered" in modes_to_run:
+        print("Running simulation with clustered zealots...")
+        results["with Clustered Zealots"] = run_simulation_and_generate_results(
+            sims["clustered"], zealots["clustered"], "with Clustered Zealots", results_dir, steps
+        )
     
-    print("Running simulation with high-degree zealots...")
-    degree_zealot_results = run_simulation_and_generate_results(sim_degree, degree_zealots, "with High-Degree Zealots", results_dir, steps)
+    if "random" in modes_to_run:
+        print("Running simulation with random zealots...")
+        results["with Random Zealots"] = run_simulation_and_generate_results(
+            sims["random"], zealots["random"], "with Random Zealots", results_dir, steps
+        )
+    
+    if "high-degree" in modes_to_run:
+        print("Running simulation with high-degree zealots...")
+        results["with High-Degree Zealots"] = run_simulation_and_generate_results(
+            sims["high-degree"], zealots["high-degree"], "with High-Degree Zealots", results_dir, steps
+        )
     
     # 收集所有模式的统计数据
-    all_stats = {
-        "without Zealots": no_zealot_results["stats"],
-        "with Clustered Zealots": cluster_zealot_results["stats"],
-        "with Random Zealots": random_zealot_results["stats"],
-        "with High-Degree Zealots": degree_zealot_results["stats"]
-    }
+    all_stats = {}
+    for mode_name, mode_results in results.items():
+        all_stats[mode_name] = mode_results["stats"]
     
     # 绘制比较统计图
-    mode_names = ["without Zealots", "with Clustered Zealots", "with Random Zealots", "with High-Degree Zealots"]
-    print("Generating comparative statistics plots...")
-    plot_comparative_statistics(all_stats, mode_names, results_dir)
+    mode_names = list(results.keys())
+    if len(mode_names) > 1:  # 只有多于一种模式时才绘制比较图
+        print("Generating comparative statistics plots...")
+        plot_comparative_statistics(all_stats, mode_names, results_dir)
+    
     print("All simulations and visualizations completed.")
     
     # 返回所有结果
-    return {
-        "without Zealots": no_zealot_results,
-        "with Clustered Zealots": cluster_zealot_results,
-        "with Random Zealots": random_zealot_results,
-        "with High-Degree Zealots": degree_zealot_results
-    }
+    return results
 
 
 def draw_zealot_network(sim, zealot_ids, title, filename):
@@ -799,5 +854,9 @@ if __name__ == "__main__":
         steps=500,            # 运行500步
         initial_scale=0.1,     # 初始意见缩放到10%
         num_zealots=10,        # 50个zealot
-        seed=114514                # 固定随机种子以便重现结果
+        seed=114514,            # 固定随机种子以便重现结果
+        morality_rate=0.0,     # 道德化率
+        zealot_morality=False,  # 不全部moralizing
+        identity_clustered=False, # 不按identity进行clustered的初始化
+        zealot_mode=None        # 运行所有模式
     ) 

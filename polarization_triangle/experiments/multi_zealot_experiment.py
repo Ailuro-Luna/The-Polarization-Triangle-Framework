@@ -369,7 +369,7 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
 if __name__ == "__main__":
     # 运行多次zealot实验
     run_multi_zealot_experiment(
-        runs=20,               # 运行20次实验
+        runs=10,               # 运行10次实验
         steps=100,            # 每次运行500步
         initial_scale=0.1,    # 初始意见缩放到10%
         num_zealots=10,       # 10个zealot
