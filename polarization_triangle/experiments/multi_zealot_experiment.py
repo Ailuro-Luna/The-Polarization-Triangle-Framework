@@ -279,7 +279,7 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
                 color=colors[i], linestyle='-')
     plt.xlabel('Step')
     plt.ylabel('Mean Intra-Cluster Variance')
-    plt.title('Average Mean Opinion Variance within Clusters across Different Simulations')
+    plt.title('Average Mean Opinion Variance(Excluding Zealots) within Clusters across Different Simulations')
     plt.legend()
     plt.grid(True)
     plt.savefig(os.path.join(stats_dir, "avg_cluster_variance.png"), dpi=300)

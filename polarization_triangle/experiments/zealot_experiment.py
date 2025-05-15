@@ -598,6 +598,9 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     # 存储意见历史和轨迹
     opinion_history = []
     trajectory = []
+
+    opinion_history.append(sim.opinions.copy())
+    trajectory.append(sim.opinions.copy())
     
     # 运行模拟
     for _ in range(steps):
