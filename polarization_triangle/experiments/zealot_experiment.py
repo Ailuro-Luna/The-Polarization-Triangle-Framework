@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import copy
+import time
 import matplotlib.pyplot as plt
 import networkx as nx
 from polarization_triangle.core.config import SimulationConfig, lfr_config
@@ -595,12 +596,39 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     返回:
     dict -- 包含意见历史记录和统计数据的字典
     """
+    # 生成初始状态的网络图
+    file_prefix = mode_name.lower().replace(' ', '_')
+    
+    # 绘制初始opinion网络图
+    draw_network(
+        sim, 
+        "opinion", 
+        f"Initial Opinion Network {mode_name}", 
+        f"{results_dir}/{file_prefix}_initial_opinion_network.png"
+    )
+    
+    # 绘制初始morality网络图
+    draw_network(
+        sim, 
+        "morality", 
+        f"Initial Morality Network {mode_name}", 
+        f"{results_dir}/{file_prefix}_initial_morality_network.png"
+    )
+    
+    # 绘制初始identity网络图
+    draw_network(
+        sim, 
+        "identity", 
+        f"Initial Identity Network {mode_name}", 
+        f"{results_dir}/{file_prefix}_initial_identity_network.png"
+    )
+    
     # 存储意见历史和轨迹
     opinion_history = []
     trajectory = []
 
-    opinion_history.append(sim.opinions.copy())
-    trajectory.append(sim.opinions.copy())
+    # opinion_history.append(sim.opinions.copy())
+    # trajectory.append(sim.opinions.copy())
     
     # 运行模拟
     for _ in range(steps):
@@ -619,15 +647,15 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     draw_opinion_distribution_heatmap(
         opinion_history, 
         f"Opinion Evolution {mode_name}", 
-        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_heatmap.png"
+        f"{results_dir}/{file_prefix}_heatmap.png"
     )
     
-    # 绘制网络图 - 意见分布
+    # 绘制最终网络图 - 意见分布
     draw_network(
         sim, 
         "opinion", 
-        f"Opinion Network {mode_name}", 
-        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_opinion_network.png"
+        f"Final Opinion Network {mode_name}", 
+        f"{results_dir}/{file_prefix}_final_opinion_network.png"
     )
     
     # 绘制zealot网络图
@@ -635,7 +663,7 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
         sim, 
         zealot_ids, 
         f"Network {mode_name}", 
-        f"{results_dir}/{mode_name.lower().replace(' ', '_')}_network.png"
+        f"{results_dir}/{file_prefix}_network.png"
     )
     
     # 生成规则使用统计图
@@ -684,6 +712,9 @@ def run_zealot_experiment(
     返回:
     dict -- 包含所有模式结果的字典
     """
+    # 记录开始时间
+    start_time = time.time()
+    
     # 设置随机数种子
     np.random.seed(seed)
     
@@ -791,6 +822,20 @@ def run_zealot_experiment(
     if len(mode_names) > 1:  # 只有多于一种模式时才绘制比较图
         print("Generating comparative statistics plots...")
         plot_comparative_statistics(all_stats, mode_names, results_dir)
+    
+    # 计算并打印总耗时
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    hours, remainder = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    print(f"All simulations completed in {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    
+    # 将耗时信息写入结果目录
+    with open(os.path.join(results_dir, "execution_time.txt"), "w") as f:
+        f.write(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
+        f.write(f"Configuration: steps={steps}, num_zealots={num_zealots}, morality_rate={morality_rate}, zealot_morality={zealot_morality}\n")
+        f.write(f"Modes run: {', '.join(modes_to_run)}")
     
     print("All simulations and visualizations completed.")
     

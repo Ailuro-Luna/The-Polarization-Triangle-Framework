@@ -23,6 +23,9 @@ def run_parameter_sweep(
     base_seed -- 基础随机种子
     output_base_dir -- 结果输出的基础目录
     """
+    # 记录总体开始时间
+    total_start_time = time.time()
+    
     # 定义参数值范围
     morality_rates = [0.0, 0.2, 0.5]  # moralizing的non-zealot people的比例
     zealot_moralities = [True, False]  # zealot是否全部moralizing
@@ -103,8 +106,26 @@ def run_parameter_sweep(
             with open(os.path.join(output_base_dir, "sweep_errors.log"), "a") as f:
                 f.write(f"Error in {folder_name}: {str(e)}\n")
     
-    print("\nParameter sweep completed!")
+    # 计算总用时
+    total_end_time = time.time()
+    total_elapsed = total_end_time - total_start_time
+    hours, remainder = divmod(total_elapsed, 3600)
+    minutes, seconds = divmod(remainder, 60)
     
+    print("\nParameter sweep completed!")
+    print(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    
+    # 记录总用时到日志文件
+    with open(os.path.join(output_base_dir, "sweep_summary.log"), "w") as f:
+        f.write(f"Parameter Sweep Summary\n")
+        f.write(f"======================\n\n")
+        f.write(f"Total parameter combinations: {len(param_combinations)}\n")
+        f.write(f"Runs per configuration: {runs_per_config}\n")
+        f.write(f"Total experiment runs: {len(param_combinations) * runs_per_config}\n\n")
+        f.write(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
+        
+    return total_elapsed
+
 
 def run_zealot_parameter_experiment(
     runs=10,
@@ -239,8 +260,8 @@ def run_zealot_parameter_experiment(
 if __name__ == "__main__":
     # 运行参数扫描实验
     run_parameter_sweep(
-        runs_per_config=6,  # 每种配置运行6次
-        steps=100,           # 每次运行100步
+        runs_per_config=10,  # 每种配置运行10次
+        steps=2000,           # 每次运行1000步
         initial_scale=0.1,   # 初始意见缩放到10%
         base_seed=42         # 基础随机种子
     ) 
