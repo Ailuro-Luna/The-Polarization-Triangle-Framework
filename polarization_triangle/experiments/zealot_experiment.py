@@ -635,13 +635,14 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
         # 更新zealot的意见
         if zealot_ids:
             set_zealot_opinions(sim, zealot_ids)
+
+        # 记录意见历史和轨迹
+        opinion_history.append(sim.opinions.copy())
+        trajectory.append(sim.opinions.copy())
         
         # 执行模拟步骤
         sim.step()
         
-        # 记录意见历史和轨迹
-        opinion_history.append(sim.opinions.copy())
-        trajectory.append(sim.opinions.copy())
     
     # 生成热图
     draw_opinion_distribution_heatmap(

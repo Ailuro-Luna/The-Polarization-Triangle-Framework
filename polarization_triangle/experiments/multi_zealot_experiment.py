@@ -7,7 +7,18 @@ import random
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
 from polarization_triangle.visualization.opinion_viz import draw_opinion_distribution_heatmap
 
-def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealots=50, base_seed=42):
+def run_multi_zealot_experiment(
+    runs=10, 
+    steps=500, 
+    initial_scale=0.1, 
+    morality_rate=0.0,
+    zealot_morality=False,
+    identity_clustered=False,
+    zealot_count=50,
+    zealot_mode=None,
+    base_seed=42,
+    output_dir=None
+):
     """
     运行多次zealot实验，并计算平均结果
     
@@ -15,13 +26,28 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
     runs -- 运行次数
     steps -- 每次运行的模拟步数
     initial_scale -- 初始意见的缩放因子
-    num_zealots -- zealot的总数量
+    morality_rate -- moralizing的non-zealot people的比例
+    zealot_morality -- zealot是否全部moralizing
+    identity_clustered -- 是否按identity进行clustered的初始化
+    zealot_count -- zealot的总数量
+    zealot_mode -- zealot的初始化配置 ("none", "clustered", "random", "high-degree")，若为None则运行所有模式
     base_seed -- 基础随机种子，每次运行会使用不同的种子
+    output_dir -- 结果输出目录
     """
     print(f"Running multi-zealot experiment with {runs} runs...")
+    print(f"Parameters: morality_rate={morality_rate}, zealot_morality={zealot_morality}, identity_clustered={identity_clustered}")
+    print(f"zealot_count={zealot_count}, zealot_mode={zealot_mode}")
     
     # 创建结果目录
-    results_dir = "results/multi_zealot_experiment"
+    if output_dir is None:
+        # 创建包含参数信息的目录名
+        dir_name = f"mor_{morality_rate:.1f}_zm_{'T' if zealot_morality else 'F'}_id_{'C' if identity_clustered else 'R'}"
+        if zealot_mode:
+            dir_name += f"_zn_{zealot_count}_zm_{zealot_mode}"
+        results_dir = f"results/multi_zealot_experiment/{dir_name}"
+    else:
+        results_dir = output_dir
+        
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     
@@ -46,8 +72,22 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
     # 运行多次实验
     run_results = []
     
-    # 模式名称
-    mode_names = ["without Zealots", "with Clustered Zealots", "with Random Zealots", "with High-Degree Zealots"]
+    # 确定要运行的模式
+    if zealot_mode is None:
+        # 如果未指定模式，运行所有模式
+        mode_names = ["without Zealots", "with Clustered Zealots", "with Random Zealots", "with High-Degree Zealots"]
+    else:
+        # 如果指定了模式，只运行该模式
+        if zealot_mode == "none":
+            mode_names = ["without Zealots"]
+        elif zealot_mode == "clustered":
+            mode_names = ["with Clustered Zealots"]
+        elif zealot_mode == "random":
+            mode_names = ["with Random Zealots"]
+        elif zealot_mode == "high-degree":
+            mode_names = ["with High-Degree Zealots"]
+        else:
+            raise ValueError(f"Unknown zealot mode: {zealot_mode}")
     
     # 收集每次运行的统计数据
     all_stats = {mode: [] for mode in mode_names}
@@ -64,9 +104,13 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
         result = run_zealot_experiment(
             steps=steps,
             initial_scale=initial_scale,
-            num_zealots=num_zealots,
+            num_zealots=zealot_count,
             seed=current_seed,
-            output_dir=run_dirs[i]
+            output_dir=run_dirs[i],
+            morality_rate=morality_rate,
+            zealot_morality=zealot_morality,
+            identity_clustered=identity_clustered,
+            zealot_mode=zealot_mode
         )
         
         # 收集结果
@@ -74,13 +118,15 @@ def run_multi_zealot_experiment(runs=10, steps=500, initial_scale=0.1, num_zealo
         
         # 收集统计数据和意见历史
         for mode in mode_names:
-            all_stats[mode].append(result[mode]["stats"])
-            all_opinion_histories[mode].append(result[mode]["opinion_history"])
+            if mode in result:
+                all_stats[mode].append(result[mode]["stats"])
+                all_opinion_histories[mode].append(result[mode]["opinion_history"])
     
     # 计算平均统计数据
     avg_stats = {}
     for mode in mode_names:
-        avg_stats[mode] = average_stats(all_stats[mode])
+        if all_stats[mode]:  # 确保有数据
+            avg_stats[mode] = average_stats(all_stats[mode])
     
     # 绘制平均统计图表
     plot_average_statistics(avg_stats, mode_names, avg_dir, steps)
@@ -369,9 +415,13 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
 if __name__ == "__main__":
     # 运行多次zealot实验
     run_multi_zealot_experiment(
-        runs=10,               # 运行10次实验
-        steps=100,            # 每次运行500步
-        initial_scale=0.1,    # 初始意见缩放到10%
-        num_zealots=10,       # 10个zealot
-        base_seed=42          # 基础随机种子
+        runs=10,                  # 运行10次实验
+        steps=100,                # 每次运行100步
+        initial_scale=0.1,        # 初始意见缩放到10%
+        morality_rate=0.2,        # moralizing的比例为20%
+        zealot_morality=True,     # zealot全部moralizing
+        identity_clustered=True,  # 按identity进行clustered的初始化
+        zealot_count=10,          # 10个zealot
+        zealot_mode="clustered",  # 使用clustered zealot模式
+        base_seed=42              # 基础随机种子
     ) 
