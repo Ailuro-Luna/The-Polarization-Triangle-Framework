@@ -186,7 +186,8 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         ("negative_counts", "Negative Counts", "Number of Agents with Negative Opinions"),
         ("negative_means", "Negative Means", "Mean Value of Negative Opinions"),
         ("positive_counts", "Positive Counts", "Number of Agents with Positive Opinions"),
-        ("positive_means", "Positive Means", "Mean Value of Positive Opinions")
+        ("positive_means", "Positive Means", "Mean Value of Positive Opinions"),
+        ("polarization_index", "Polarization Index", "Koudenburg Polarization Index")
     ]
     
     # 使用不同颜色和线型
@@ -198,31 +199,50 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
     
     # 绘制每种统计数据的综合图
     for stat_key, stat_label, stat_title in stat_keys:
+        # 检查是否有这个统计数据
+        has_stat_data = False
+        for config_name in config_names:
+            if config_name in all_configs_stats:
+                # 对于zealot_mode为"none"的情况
+                if "without Zealots" in all_configs_stats[config_name]:
+                    if stat_key in all_configs_stats[config_name]["without Zealots"]:
+                        has_stat_data = True
+                        break
+                # 对于其他模式
+                elif len(all_configs_stats[config_name]) > 0:
+                    mode_name = list(all_configs_stats[config_name].keys())[0]
+                    if stat_key in all_configs_stats[config_name][mode_name]:
+                        has_stat_data = True
+                        break
+        
+        if not has_stat_data:
+            continue
+            
         plt.figure(figsize=(15, 10))
         
         # 为每个参数组合绘制一条线
         for i, config_name in enumerate(config_names):
             if config_name in all_configs_stats:
-                config_stats = all_configs_stats[config_name]
-                
                 # 对于zealot_mode为"none"的情况，我们只有"without Zealots"模式
-                if "without Zealots" in config_stats:
-                    if stat_key in config_stats["without Zealots"]:
+                if "without Zealots" in all_configs_stats[config_name]:
+                    if stat_key in all_configs_stats[config_name]["without Zealots"]:
+                        data = all_configs_stats[config_name]["without Zealots"][stat_key]
                         plt.plot(
-                            step_values, 
-                            config_stats["without Zealots"][stat_key], 
+                            range(len(data)), 
+                            data, 
                             label=config_name,
                             color=colors[i % len(colors)], 
                             linestyle=linestyles[i % len(linestyles)]
                         )
                 # 对于其他模式，可以选择使用到的模式
-                elif len(config_stats) > 0:
+                elif len(all_configs_stats[config_name]) > 0:
                     # 选择第一个可用的模式
-                    mode_name = list(config_stats.keys())[0]
-                    if stat_key in config_stats[mode_name]:
+                    mode_name = list(all_configs_stats[config_name].keys())[0]
+                    if stat_key in all_configs_stats[config_name][mode_name]:
+                        data = all_configs_stats[config_name][mode_name][stat_key]
                         plt.plot(
-                            step_values, 
-                            config_stats[mode_name][stat_key], 
+                            range(len(data)), 
+                            data, 
                             label=config_name,
                             color=colors[i % len(colors)], 
                             linestyle=linestyles[i % len(linestyles)]
@@ -245,7 +265,16 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         for config_name in config_names:
             if config_name in all_configs_stats:
                 for stat_key, _, _ in stat_keys:
-                    f.write(f",{config_name}_{stat_key}")
+                    # 检查是否有这个统计数据
+                    has_stat = False
+                    if "without Zealots" in all_configs_stats[config_name]:
+                        has_stat = stat_key in all_configs_stats[config_name]["without Zealots"]
+                    elif len(all_configs_stats[config_name]) > 0:
+                        mode_name = list(all_configs_stats[config_name].keys())[0]
+                        has_stat = stat_key in all_configs_stats[config_name][mode_name]
+                    
+                    if has_stat:
+                        f.write(f",{config_name}_{stat_key}")
         f.write("\n")
         
         # 写入数据
@@ -262,7 +291,7 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
                         for stat_key, _, _ in stat_keys:
                             if stat_key in mode_stats and step < len(mode_stats[stat_key]):
                                 f.write(f",{mode_stats[stat_key][step]:.4f}")
-                            else:
+                            elif stat_key in mode_stats:  # 如果存在这个键但步骤超出范围
                                 f.write(",0.0000")
                     # 对于其他模式
                     elif len(config_stats) > 0:
@@ -271,7 +300,7 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
                         for stat_key, _, _ in stat_keys:
                             if stat_key in mode_stats and step < len(mode_stats[stat_key]):
                                 f.write(f",{mode_stats[stat_key][step]:.4f}")
-                            else:
+                            elif stat_key in mode_stats:  # 如果存在这个键但步骤超出范围
                                 f.write(",0.0000")
             
             f.write("\n")
@@ -411,7 +440,7 @@ if __name__ == "__main__":
     # 运行参数扫描实验
     run_parameter_sweep(
         runs_per_config=10,  # 每种配置运行10次
-        steps=1500,           # 每次运行1000步
+        steps=1000,           # 每次运行1000步
         initial_scale=0.1,   # 初始意见缩放到10%
         base_seed=42         # 基础随机种子
     ) 

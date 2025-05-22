@@ -319,6 +319,9 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
         positive_counts.append(positive_count)
         positive_means.append(np.mean(positive_opinions) if positive_count > 0 else 0)
     
+    # 获取极化指数历史
+    polarization_history = sim.get_polarization_history() if hasattr(sim, 'get_polarization_history') else []
+    
     # 整合所有统计数据
     stats = {
         "mean_opinions": mean_opinions,
@@ -330,7 +333,8 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
         "positive_counts": positive_counts,
         "positive_means": positive_means,
         "community_variance_history": community_variance_history,
-        "communities": communities
+        "communities": communities,
+        "polarization_index": polarization_history  # 添加极化指数历史
     }
     
     # 单独保存每个模式的统计数据到CSV文件
@@ -342,13 +346,20 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
     stats_csv = os.path.join(stats_dir, f"{file_prefix}_opinion_stats.csv")
     with open(stats_csv, "w") as f:
         f.write("step,mean_opinion,mean_abs_opinion,non_zealot_variance,cluster_variance,")
-        f.write("negative_count,negative_mean,positive_count,positive_mean\n")
+        f.write("negative_count,negative_mean,positive_count,positive_mean")
+        if polarization_history:
+            f.write(",polarization_index")  # 添加极化指数列
+        f.write("\n")
         
         for step in range(num_steps):
             f.write(f"{step},{mean_opinions[step]:.4f},{mean_abs_opinions[step]:.4f},")
             f.write(f"{non_zealot_var[step]:.4f},{cluster_variances[step]:.4f},")
             f.write(f"{negative_counts[step]},{negative_means[step]:.4f},")
-            f.write(f"{positive_counts[step]},{positive_means[step]:.4f}\n")
+            f.write(f"{positive_counts[step]},{positive_means[step]:.4f}")
+            # 如果有极化指数数据，添加到CSV
+            if polarization_history and step < len(polarization_history):
+                f.write(f",{polarization_history[step]:.4f}")
+            f.write("\n")
     
     # 保存每个社区的方差数据到单独的CSV文件
     community_csv = os.path.join(stats_dir, f"{file_prefix}_community_variances.csv")
@@ -368,6 +379,17 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
                 else:
                     f.write(",0.0000")  # 防止索引越界
             f.write("\n")
+    
+    # 如果有极化指数数据，绘制极化指数随时间变化图
+    if polarization_history:
+        plt.figure(figsize=(12, 7))
+        plt.plot(range(len(polarization_history)), polarization_history, 'b-', linewidth=2)
+        plt.xlabel('Step')
+        plt.ylabel('Polarization Index')
+        plt.title(f'Polarization Index over Time\n{mode_name}')
+        plt.grid(True)
+        plt.savefig(os.path.join(stats_dir, f"{file_prefix}_polarization_index.png"), dpi=300)
+        plt.close()
     
     return stats
 
@@ -557,7 +579,28 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
     plt.savefig(os.path.join(stats_dir, "comparison_positive_means.png"), dpi=300)
     plt.close()
     
-    # 9. 保存组合数据到CSV文件
+    # 9. 绘制极化指数对比图（如果有数据）
+    has_polarization_data = all(
+        "polarization_index" in all_stats[mode] and len(all_stats[mode]["polarization_index"]) > 0 
+        for mode in mode_names
+    )
+    
+    if has_polarization_data:
+        plt.figure(figsize=(12, 7))
+        for i, mode in enumerate(mode_names):
+            plt.plot(steps[:len(all_stats[mode]["polarization_index"])], 
+                    all_stats[mode]["polarization_index"], 
+                    label=f'{mode}', 
+                    color=colors[i], linestyle='-')
+        plt.xlabel('Step')
+        plt.ylabel('Polarization Index')
+        plt.title('Comparison of Polarization Index across Different Simulations')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(stats_dir, "comparison_polarization_index.png"), dpi=300)
+        plt.close()
+    
+    # 10. 保存组合数据到CSV文件
     stats_csv = os.path.join(stats_dir, "comparison_opinion_stats.csv")
     with open(stats_csv, "w") as f:
         # 写入标题行
@@ -565,6 +608,8 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
         for mode in mode_names:
             f.write(f",{mode}_mean_opinion,{mode}_mean_abs_opinion,{mode}_non_zealot_variance,{mode}_cluster_variance")
             f.write(f",{mode}_negative_count,{mode}_negative_mean,{mode}_positive_count,{mode}_positive_mean")
+            if "polarization_index" in all_stats[mode] and len(all_stats[mode]["polarization_index"]) > 0:
+                f.write(f",{mode}_polarization_index")
         f.write("\n")
         
         # 写入数据
@@ -579,6 +624,9 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
                 f.write(f",{all_stats[mode]['negative_means'][step]:.4f}")
                 f.write(f",{all_stats[mode]['positive_counts'][step]}")
                 f.write(f",{all_stats[mode]['positive_means'][step]:.4f}")
+                # 如果有极化指数数据，添加到CSV
+                if "polarization_index" in all_stats[mode] and step < len(all_stats[mode]["polarization_index"]):
+                    f.write(f",{all_stats[mode]['polarization_index'][step]:.4f}")
             f.write("\n")
 
 

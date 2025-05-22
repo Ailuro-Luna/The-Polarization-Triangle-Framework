@@ -159,7 +159,7 @@ def average_stats(stats_list):
     stat_keys = [
         "mean_opinions", "mean_abs_opinions", "non_zealot_variance", 
         "cluster_variance", "negative_counts", "negative_means", 
-        "positive_counts", "positive_means"
+        "positive_counts", "positive_means", "polarization_index"
     ]
     
     # 初始化每个统计数据的数组
@@ -170,8 +170,10 @@ def average_stats(stats_list):
     # 计算所有运行的总和
     for stats in stats_list:
         for key in stat_keys:
-            if key in stats:
-                avg_stats[key] += np.array(stats[key])
+            if key in stats and key in avg_stats:
+                # 确保数组长度一致
+                min_length = min(len(stats[key]), len(avg_stats[key]))
+                avg_stats[key][:min_length] += np.array(stats[key][:min_length])
     
     # 计算平均值
     n = len(stats_list)
@@ -387,7 +389,28 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
     plt.savefig(os.path.join(stats_dir, "avg_positive_means.png"), dpi=300)
     plt.close()
     
-    # 9. 保存平均统计数据到CSV文件
+    # 9. 绘制极化指数对比图（如果有数据）
+    has_polarization_data = all(
+        "polarization_index" in avg_stats[mode] and len(avg_stats[mode]["polarization_index"]) > 0 
+        for mode in mode_names
+    )
+    
+    if has_polarization_data:
+        plt.figure(figsize=(12, 7))
+        for i, mode in enumerate(mode_names):
+            plt.plot(range(len(avg_stats[mode]["polarization_index"])), 
+                    avg_stats[mode]["polarization_index"], 
+                    label=f'{mode}', 
+                    color=colors[i], linestyle='-')
+        plt.xlabel('Step')
+        plt.ylabel('Polarization Index')
+        plt.title('Average Polarization Index across Different Simulations')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(stats_dir, "avg_polarization_index.png"), dpi=300)
+        plt.close()
+    
+    # 10. 保存平均统计数据到CSV文件
     stats_csv = os.path.join(stats_dir, "avg_opinion_stats.csv")
     with open(stats_csv, "w") as f:
         # 写入标题行
@@ -395,6 +418,8 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
         for mode in mode_names:
             f.write(f",{mode}_mean_opinion,{mode}_mean_abs_opinion,{mode}_non_zealot_variance,{mode}_cluster_variance")
             f.write(f",{mode}_negative_count,{mode}_negative_mean,{mode}_positive_count,{mode}_positive_mean")
+            if "polarization_index" in avg_stats[mode] and len(avg_stats[mode]["polarization_index"]) > 0:
+                f.write(f",{mode}_polarization_index")
         f.write("\n")
         
         # 写入数据
@@ -409,6 +434,9 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
                 f.write(f",{avg_stats[mode]['negative_means'][step]:.4f}")
                 f.write(f",{avg_stats[mode]['positive_counts'][step]:.1f}")
                 f.write(f",{avg_stats[mode]['positive_means'][step]:.4f}")
+                # 如果有极化指数数据，添加到CSV
+                if "polarization_index" in avg_stats[mode] and step < len(avg_stats[mode]["polarization_index"]):
+                    f.write(f",{avg_stats[mode]['polarization_index'][step]:.4f}")
             f.write("\n")
 
 
