@@ -60,7 +60,7 @@ def run_simulation_with_rule_tracking(config, steps=500):
     return sim
 
 
-def batch_test(output_dir = "results/batch_results", steps=100):
+def batch_test(output_dir = "results/batch_results", steps=300):
     base_dir = output_dir
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
@@ -243,3 +243,33 @@ def batch_test(output_dir = "results/batch_results", steps=100):
                                 f.write(f"{i},{sim.identities[i]},{sim.morals[i]},{sim.opinions[i]:.4f}")
                                 f.write(f",{components['self_activation'][i]:.4f},{components['social_influence'][i]:.4f}")
                                 f.write(f",{components['self_activation'][i] + components['social_influence'][i]:.4f}\n")
+                        
+                        # 添加：绘制极化指数随时间变化图
+                        if hasattr(sim, 'get_polarization_history') and callable(getattr(sim, 'get_polarization_history')):
+                            polarization_history = sim.get_polarization_history()
+                            if polarization_history:
+                                # 创建极化指数子文件夹（可选）
+                                # polarization_folder = os.path.join(folder_path, "polarization")
+                                polarization_folder = os.path.join(folder_path, "")
+                                if not os.path.exists(polarization_folder):
+                                    os.makedirs(polarization_folder)
+                                
+                                # 绘制极化指数时序图
+                                polarization_path = os.path.join(polarization_folder, "polarization_index.png")
+                                plt.figure(figsize=(12, 7))
+                                plt.plot(range(len(polarization_history)), polarization_history, 'b-', linewidth=2)
+                                plt.xlabel('Step')
+                                plt.ylabel('Polarization Index')
+                                plt.title(f'Polarization Index over Time\nConfig: {folder_name}')
+                                plt.grid(True)
+                                plt.savefig(polarization_path, dpi=300)
+                                plt.close()
+                                
+                                # 保存极化指数数据到CSV
+                                polar_data_path = os.path.join(polarization_folder, "polarization_data.csv")
+                                with open(polar_data_path, "w") as f:
+                                    f.write("step,polarization_index\n")
+                                    for step, p_value in enumerate(polarization_history):
+                                        f.write(f"{step},{p_value:.4f}\n")
+                                
+                                print(f"Saved polarization index data and visualization to {polarization_folder}")
