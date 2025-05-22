@@ -99,6 +99,9 @@ class Simulation:
         # 添加轨迹存储
         self.opinion_trajectory = []
         
+        # 初始化极化指数历史
+        self.polarization_history = []
+        
         # 优化用的数据结构(CSR格式)
         self._create_csr_neighbors()
 
@@ -249,8 +252,52 @@ class Simulation:
             self.morals, 
             self.opinions, 
             i, j, 
-            sigma_same_identity
+            sigma_same_identity,
+            self.config.cohesion_factor
         )
+    
+    def calculate_polarization_index(self):
+        """
+        计算Koudenburg观点极化指数
+        
+        返回:
+        极化指数值 (0-100)
+        """
+        # 1. 将观点离散化为5个类别
+        category_counts = np.zeros(5, dtype=np.int32)
+        
+        for opinion in self.opinions:
+            if opinion < -0.6:
+                category_counts[0] += 1  # 类别1: 非常不同意
+            elif opinion < -0.2:
+                category_counts[1] += 1  # 类别2: 不同意
+            elif opinion <= 0.2:
+                category_counts[2] += 1  # 类别3: 中立
+            elif opinion <= 0.6:
+                category_counts[3] += 1  # 类别4: 同意
+            else:
+                category_counts[4] += 1  # 类别5: 非常同意
+        
+        # 2. 获取各类别Agent数量
+        n1, n2, n3, n4, n5 = category_counts
+        N = self.num_agents
+        
+        # 3. 应用Koudenburg公式计算极化指数
+        # 分子: 计算跨越中立点的意见对加权和
+        numerator = (2.14 * n2 * n4 + 
+                    2.70 * (n1 * n4 + n2 * n5) + 
+                    3.96 * n1 * n5)
+        
+        # 分母: 归一化因子
+        denominator = 0.0099 * (N ** 2)
+        
+        # 计算极化指数
+        if denominator > 0:
+            polarization_index = numerator / denominator
+        else:
+            polarization_index = 0.0
+            
+        return polarization_index
 
     # 优化的step方法，基于极化三角框架
     def step(self):
@@ -293,6 +340,10 @@ class Simulation:
         # 存储自我激活和社会影响的历史数据
         self.self_activation_history.append(self.self_activation.copy())
         self.social_influence_history.append(self.social_influence.copy())
+        
+        # 计算并存储极化指数
+        polarization = self.calculate_polarization_index()
+        self.polarization_history.append(polarization)
     
     def get_activation_components(self):
         """
@@ -317,6 +368,15 @@ class Simulation:
             "self_activation_history": self.self_activation_history,
             "social_influence_history": self.social_influence_history
         }
+    
+    def get_polarization_history(self):
+        """
+        获取所有历史步骤的极化指数
+        
+        返回:
+        极化指数历史列表
+        """
+        return self.polarization_history
         
     def get_agent_activation_details(self, agent_id):
         """
