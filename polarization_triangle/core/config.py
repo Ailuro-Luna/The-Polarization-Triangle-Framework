@@ -47,8 +47,8 @@ class SimulationConfig:
     # 极化三角框架模型参数
     delta: float = 1  # 意见衰减率
     u: float = 1  # 意见激活系数
-    alpha: float = 0.25  # 自我激活系数
-    beta: float = 0.25  # 社会影响系数
+    alpha: float = 0.4  # 自我激活系数
+    beta: float = 0.12  # 社会影响系数
     gamma: float = 1  # 道德化影响系数
     
     def copy(self):
