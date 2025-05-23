@@ -20,7 +20,12 @@ The main experiment function `run_zealot_experiment()` accepts the following par
 - `steps`: Number of simulation steps (default: 500)
 - `initial_scale`: Initial opinion scaling factor (default: 0.1) - simulates neutral attitudes towards a new topic
 - `num_zealots`: Number of zealots to introduce (default: 50)
-- `seed`: Random seed for reproducibility (default: 114514)
+- `seed`: Random seed for reproducibility (default: 42)
+- `output_dir`: Results output directory (default: None, uses "results/zealot_experiment")
+- `morality_rate`: Proportion of non-zealot agents that are moralized (default: 0.0)
+- `zealot_morality`: Whether all zealots are moralized (default: False)
+- `identity_clustered`: Whether to cluster agents by identity during initialization (default: False)
+- `zealot_mode`: Zealot initialization mode - "none", "clustered", "random", "high-degree" (default: None, runs all modes)
 
 ## Generated Visualizations
 
@@ -122,7 +127,18 @@ run_zealot_experiment(
     steps=1000,           # Run for 1000 steps
     initial_scale=0.2,    # Initial opinions scaled to 20%
     num_zealots=20,       # 20 zealots
-    seed=42               # Fixed random seed
+    seed=42,              # Fixed random seed
+    morality_rate=0.3,    # 30% of non-zealots are moralized
+    zealot_morality=True, # All zealots are moralized
+    identity_clustered=True, # Cluster agents by identity
+    zealot_mode="clustered"  # Only run clustered zealot mode
+)
+
+# Run only specific zealot modes
+run_zealot_experiment(
+    zealot_mode="random",  # Only run random zealot distribution
+    num_zealots=30,
+    steps=500
 )
 ```
 

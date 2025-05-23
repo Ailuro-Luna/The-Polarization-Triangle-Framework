@@ -214,6 +214,59 @@ def generate_rule_usage_plots(sim, title_prefix, output_dir):
     )
 ```
 
+## 6. 激活组件可视化图表
+
+**生成函数**: `generate_activation_visualizations` 
+**源文件**: `polarization_triangle/experiments/zealot_experiment.py`
+
+**调用位置**:
+- 在 `run_simulation_and_generate_results` 函数中调用
+
+**输出文件**:
+- 激活组件散点图: `{results_dir}/activation_components/{title_prefix}_activation_components.png`
+- 激活历史变化图: `{results_dir}/activation_components/{title_prefix}_activation_history.png`
+- 激活热力图: `{results_dir}/activation_components/{title_prefix}_activation_heatmap.png`
+- 激活轨迹图: `{results_dir}/activation_components/{title_prefix}_activation_trajectory.png`
+- 激活数据CSV: `{results_dir}/activation_components/{title_prefix}_activation_data.csv`
+
+**关键代码片段**:
+```python
+# zealot_experiment.py 中的函数
+def generate_activation_visualizations(sim, trajectory, title_prefix, results_dir):
+    # 创建激活组件子目录
+    activation_dir = os.path.join(results_dir, "activation_components")
+    os.makedirs(activation_dir, exist_ok=True)
+    
+    # 绘制激活组件散点图和直方图
+    draw_activation_components(
+        sim, 
+        f"Activation Components {title_prefix}", 
+        f"{activation_dir}/{title_prefix}_activation_components.png"
+    )
+    
+    # 绘制激活历史变化图
+    draw_activation_history(
+        sim, 
+        f"Activation History {title_prefix}", 
+        f"{activation_dir}/{title_prefix}_activation_history.png"
+    )
+    
+    # 绘制激活热力图
+    draw_activation_heatmap(
+        sim, 
+        f"Activation Heatmap {title_prefix}", 
+        f"{activation_dir}/{title_prefix}_activation_heatmap.png"
+    )
+    
+    # 绘制激活轨迹图
+    draw_activation_trajectory(
+        sim, 
+        trajectory,
+        f"Activation Trajectory {title_prefix}", 
+        f"{activation_dir}/{title_prefix}_activation_trajectory.png"
+    )
+```
+
 ## 文件命名规则与路径总结
 
 1. **单次实验**:
