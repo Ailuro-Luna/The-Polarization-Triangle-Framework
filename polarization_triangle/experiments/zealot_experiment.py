@@ -21,82 +21,6 @@ from polarization_triangle.visualization.activation_viz import (
 from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory
 
 
-def set_zealot_opinions(sim, zealot_ids):
-    """
-    将指定的zealot的意见设置为1.0
-    
-    参数:
-    sim -- simulation实例
-    zealot_ids -- zealot的ID列表
-    """
-    for agent_id in zealot_ids:
-        sim.opinions[agent_id] = 1.0
-
-
-def initialize_zealots(sim, num_zealots, mode="random"):
-    """
-    初始化zealot分布
-    
-    参数:
-    sim -- 原始simulation实例
-    num_zealots -- zealot的总数量
-    mode -- zealot选择模式: 
-            "random" - 随机选择
-            "clustered" - 聚类选择(尽量在同一社区)
-            "degree" - 选择度数最高的节点
-    
-    返回:
-    list -- zealot的ID列表
-    """
-    if num_zealots > sim.num_agents:
-        num_zealots = sim.num_agents
-        print(f"Warning: num_zealots exceeds agent count, setting to {sim.num_agents}")
-    
-    zealot_ids = []
-    
-    if mode == "random":
-        # 随机选择指定数量的agent作为zealot
-        all_nodes = list(range(sim.num_agents))
-        zealot_ids = np.random.choice(all_nodes, size=num_zealots, replace=False).tolist()
-    
-    elif mode == "degree":
-        # 选择度数最高的节点作为zealot
-        node_degrees = list(sim.graph.degree())
-        sorted_nodes_by_degree = sorted(node_degrees, key=lambda x: x[1], reverse=True)
-        zealot_ids = [node for node, degree in sorted_nodes_by_degree[:num_zealots]]
-    
-    elif mode == "clustered":
-        # 获取社区信息
-        communities = {}
-        for node in sim.graph.nodes():
-            community = sim.graph.nodes[node].get("community")
-            if isinstance(community, (set, frozenset)):
-                community = min(community)
-            if community not in communities:
-                communities[community] = []
-            communities[community].append(node)
-        
-        # 按社区大小排序
-        sorted_communities = sorted(communities.items(), key=lambda x: len(x[1]), reverse=True)
-        
-        # 尽量在同一社区内选择zealot
-        zealots_left = num_zealots
-        for community_id, members in sorted_communities:
-            if zealots_left <= 0:
-                break
-            
-            # 决定从当前社区选择多少个zealot
-            to_select = min(zealots_left, len(members))
-            selected = np.random.choice(members, size=to_select, replace=False).tolist()
-            zealot_ids.extend(selected)
-            zealots_left -= to_select
-    
-    else:
-        raise ValueError(f"Unknown zealot selection mode: {mode}")
-    
-    return zealot_ids
-
-
 def generate_rule_usage_plots(sim, title_prefix, output_dir):
     """
     生成规则使用统计图
@@ -675,20 +599,17 @@ def run_simulation_and_generate_results(sim, zealot_ids, mode_name, results_dir,
     opinion_history = []
     trajectory = []
 
-    # opinion_history.append(sim.opinions.copy())
-    # trajectory.append(sim.opinions.copy())
-    
     # 运行模拟
     for _ in range(steps):
         # 更新zealot的意见
         if zealot_ids:
-            set_zealot_opinions(sim, zealot_ids)
+            sim.set_zealot_opinions()
 
         # 记录意见历史和轨迹
         opinion_history.append(sim.opinions.copy())
         trajectory.append(sim.opinions.copy())
         
-        # 执行模拟步骤
+        # 执行模拟步骤（zealot意见会在step中自动重置）
         sim.step()
         
     
@@ -806,26 +727,39 @@ def run_zealot_experiment(
         sims["none"] = base_sim
         zealots["none"] = []
     
-    # 对于其他模式，创建副本
+    # 对于其他模式，创建副本并设置zealot配置
     if "clustered" in modes_to_run:
-        sims["clustered"] = copy.deepcopy(base_sim)
-        zealots["clustered"] = initialize_zealots(sims["clustered"], num_zealots, mode="clustered")
+        clustered_config = copy.deepcopy(base_config)
+        clustered_config.enable_zealots = True
+        clustered_config.zealot_count = num_zealots
+        clustered_config.zealot_mode = "clustered"
+        clustered_config.zealot_morality = zealot_morality
+        sims["clustered"] = Simulation(clustered_config)
+        sims["clustered"].opinions *= initial_scale
+        sims["clustered"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
+        zealots["clustered"] = sims["clustered"].get_zealot_ids()
     
     if "random" in modes_to_run:
-        sims["random"] = copy.deepcopy(base_sim)
-        zealots["random"] = initialize_zealots(sims["random"], num_zealots, mode="random")
+        random_config = copy.deepcopy(base_config)
+        random_config.enable_zealots = True
+        random_config.zealot_count = num_zealots
+        random_config.zealot_mode = "random"
+        random_config.zealot_morality = zealot_morality
+        sims["random"] = Simulation(random_config)
+        sims["random"].opinions *= initial_scale
+        sims["random"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
+        zealots["random"] = sims["random"].get_zealot_ids()
     
     if "high-degree" in modes_to_run:
-        sims["high-degree"] = copy.deepcopy(base_sim)
-        zealots["high-degree"] = initialize_zealots(sims["high-degree"], num_zealots, mode="degree")
-    
-    # 如果zealot_morality为True，将所有zealot的morality设为1
-    if zealot_morality:
-        for mode, zealot_list in zealots.items():
-            if mode == "none":
-                continue  # 无zealot模式跳过
-            for agent_id in zealot_list:
-                sims[mode].morals[agent_id] = 1
+        degree_config = copy.deepcopy(base_config)
+        degree_config.enable_zealots = True
+        degree_config.zealot_count = num_zealots
+        degree_config.zealot_mode = "degree"
+        degree_config.zealot_morality = zealot_morality
+        sims["high-degree"] = Simulation(degree_config)
+        sims["high-degree"].opinions *= initial_scale
+        sims["high-degree"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
+        zealots["high-degree"] = sims["high-degree"].get_zealot_ids()
     
     # 创建结果目录
     if output_dir is None:

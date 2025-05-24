@@ -43,6 +43,12 @@ class SimulationConfig:
     # 身份规范强度参数
     identity_antagonism_threshold: float = 0.8  # 小于1的常数参数A，定义对抗阈值
 
+    # Zealot相关参数
+    zealot_count: int = 0  # zealot的数量，0表示不使用zealot
+    zealot_mode: str = "random"  # 选择模式：random, clustered, degree
+    zealot_opinion: float = 1.0  # zealot固定的意见值
+    enable_zealots: bool = False  # 是否启用zealot功能
+    zealot_morality: bool = False  # zealot是否全部设置为moralizing (morality=1)
     
     # 极化三角框架模型参数
     delta: float = 1  # 意见衰减率

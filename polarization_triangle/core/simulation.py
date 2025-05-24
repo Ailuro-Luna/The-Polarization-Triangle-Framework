@@ -4,7 +4,7 @@ import networkx as nx
 from polarization_triangle.core.config import SimulationConfig
 from polarization_triangle.core.dynamics import *
 from polarization_triangle.utils.network import create_network, handle_isolated_nodes
-from typing import Dict
+from typing import Dict, List
 
 class Simulation:
     def __init__(self, config: SimulationConfig):
@@ -38,6 +38,11 @@ class Simulation:
 
         # 初始化规则计数器历史记录
         self.rule_counts_history = []
+
+        # 初始化zealot相关属性
+        self.zealot_ids = []
+        self.zealot_opinion = config.zealot_opinion
+        self.enable_zealots = config.enable_zealots or config.zealot_count > 0
 
         if self.network_type in ['community', 'lfr']:
             for node in self.graph.nodes():
@@ -82,6 +87,10 @@ class Simulation:
         self._init_morality()
         self._init_opinions()
         
+        # 初始化zealots（必须在其他属性初始化之后）
+        if self.enable_zealots:
+            self._init_zealots()
+        
         # 存储每个agent的邻居列表
         self.neighbors_list = [[] for _ in range(self.num_agents)]
         
@@ -104,6 +113,124 @@ class Simulation:
         
         # 优化用的数据结构(CSR格式)
         self._create_csr_neighbors()
+
+    def _init_zealots(self):
+        """
+        根据配置初始化zealots
+        """
+        zealot_count = self.config.zealot_count
+        zealot_mode = self.config.zealot_mode
+        
+        if zealot_count <= 0:
+            return
+        
+        if zealot_count > self.num_agents:
+            zealot_count = self.num_agents
+            print(f"Warning: zealot_count exceeds agent count, setting to {self.num_agents}")
+        
+        # 根据模式选择zealots
+        if zealot_mode == "random":
+            # 随机选择指定数量的agent作为zealot
+            all_nodes = list(range(self.num_agents))
+            self.zealot_ids = np.random.choice(all_nodes, size=zealot_count, replace=False).tolist()
+        
+        elif zealot_mode == "degree":
+            # 选择度数最高的节点作为zealot
+            node_degrees = list(self.graph.degree())
+            sorted_nodes_by_degree = sorted(node_degrees, key=lambda x: x[1], reverse=True)
+            self.zealot_ids = [node for node, degree in sorted_nodes_by_degree[:zealot_count]]
+        
+        elif zealot_mode == "clustered":
+            # 获取社区信息
+            communities = {}
+            for node in self.graph.nodes():
+                community = self.graph.nodes[node].get("community")
+                if isinstance(community, (set, frozenset)):
+                    community = min(community)
+                if community not in communities:
+                    communities[community] = []
+                communities[community].append(node)
+            
+            # 按社区大小排序
+            sorted_communities = sorted(communities.items(), key=lambda x: len(x[1]), reverse=True)
+            
+            # 尽量在同一社区内选择zealot
+            zealots_left = zealot_count
+            self.zealot_ids = []
+            for community_id, members in sorted_communities:
+                if zealots_left <= 0:
+                    break
+                
+                # 决定从当前社区选择多少个zealot
+                to_select = min(zealots_left, len(members))
+                selected = np.random.choice(members, size=to_select, replace=False).tolist()
+                self.zealot_ids.extend(selected)
+                zealots_left -= to_select
+        
+        else:
+            raise ValueError(f"Unknown zealot mode: {zealot_mode}")
+        
+        # 设置zealot的初始意见
+        for agent_id in self.zealot_ids:
+            self.opinions[agent_id] = self.zealot_opinion
+        
+        # 如果配置要求，将zealot设置为moralizing
+        if self.config.zealot_morality:
+            for agent_id in self.zealot_ids:
+                self.morals[agent_id] = 1
+
+    def set_zealot_opinions(self):
+        """
+        将zealot的意见重置为固定值
+        """
+        if self.enable_zealots and self.zealot_ids:
+            for agent_id in self.zealot_ids:
+                self.opinions[agent_id] = self.zealot_opinion
+
+    def get_zealot_ids(self) -> List[int]:
+        """
+        获取zealot的ID列表
+        
+        返回:
+        zealot的ID列表
+        """
+        return self.zealot_ids.copy()
+
+    def add_zealots(self, agent_ids: List[int], opinion: float = None):
+        """
+        手动添加zealots
+        
+        参数:
+        agent_ids -- 要设置为zealot的agent ID列表
+        opinion -- zealot的固定意见值，如果为None则使用配置中的值
+        """
+        if opinion is None:
+            opinion = self.zealot_opinion
+        
+        for agent_id in agent_ids:
+            if 0 <= agent_id < self.num_agents and agent_id not in self.zealot_ids:
+                self.zealot_ids.append(agent_id)
+                self.opinions[agent_id] = opinion
+                if self.config.zealot_morality:
+                    self.morals[agent_id] = 1
+        
+        self.enable_zealots = len(self.zealot_ids) > 0
+
+    def remove_zealots(self, agent_ids: List[int] = None):
+        """
+        移除zealots
+        
+        参数:
+        agent_ids -- 要移除的zealot ID列表，如果为None则移除所有zealots
+        """
+        if agent_ids is None:
+            self.zealot_ids.clear()
+        else:
+            for agent_id in agent_ids:
+                if agent_id in self.zealot_ids:
+                    self.zealot_ids.remove(agent_id)
+        
+        self.enable_zealots = len(self.zealot_ids) > 0
 
     def _create_csr_neighbors(self):
         """
@@ -333,6 +460,9 @@ class Simulation:
         self.opinions = new_opinions
         self.self_activation = new_self_activation
         self.social_influence = new_social_influence
+        
+        # 重置zealot的意见（必须在更新意见之后）
+        self.set_zealot_opinions()
         
         # 为了与原有代码兼容，存储规则计数
         self.rule_counts_history.append(rule_counts)

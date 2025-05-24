@@ -392,10 +392,10 @@ def run_zealot_parameter_experiment(
         # 为每次运行使用不同的随机种子
         current_seed = base_seed + i
         
-        # 在单独的目录中运行实验
+        # 在单独的目录中运行实验，使用新的内置zealot功能
         print(f"\nRun {i+1}/{runs} with seed {current_seed}")
         
-        # 运行指定的模式
+        # 运行指定的模式，使用新的内置zealot功能
         result = run_zealot_experiment(
             steps=steps,
             initial_scale=initial_scale,
