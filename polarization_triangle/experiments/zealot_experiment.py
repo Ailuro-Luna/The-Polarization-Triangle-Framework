@@ -4,7 +4,7 @@ import copy
 import time
 import matplotlib.pyplot as plt
 import networkx as nx
-from polarization_triangle.core.config import SimulationConfig, lfr_config
+from polarization_triangle.core.config import SimulationConfig, base_config, high_polarization_config
 from polarization_triangle.core.simulation import Simulation
 from polarization_triangle.visualization.network_viz import draw_network
 from polarization_triangle.visualization.opinion_viz import draw_opinion_distribution_heatmap
@@ -768,7 +768,7 @@ def run_zealot_experiment(
     np.random.seed(seed)
     
     # 创建基础模拟实例
-    base_config = copy.deepcopy(lfr_config)
+    base_config = copy.deepcopy(high_polarization_config)
     base_config.cluster_identity = identity_clustered
     base_config.cluster_morality = False  # 暂时不集群morality
     base_config.cluster_opinion = False

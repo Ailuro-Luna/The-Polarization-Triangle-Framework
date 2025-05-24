@@ -3,7 +3,7 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from polarization_triangle.core.simulation import Simulation
-from polarization_triangle.core.config import lfr_config
+from polarization_triangle.core.config import base_config, high_polarization_config
 from polarization_triangle.visualization.network_viz import draw_network
 from polarization_triangle.visualization.opinion_viz import (
     draw_opinion_distribution, 
@@ -77,7 +77,7 @@ def batch_test(output_dir = "results/batch_results", steps=300):
                         if not os.path.exists(folder_path):
                             os.makedirs(folder_path)
                         print("Processing configuration:", folder_name)
-                        params = copy.deepcopy(lfr_config)
+                        params = copy.deepcopy(high_polarization_config)
                         params.cluster_identity = (id_mode == "clustered")
                         params.cluster_morality = (mor_mode == "clustered")
                         params.cluster_opinion = (op_mode == "clustered")

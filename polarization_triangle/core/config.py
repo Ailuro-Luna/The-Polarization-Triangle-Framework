@@ -1,7 +1,7 @@
 # config.py
 from dataclasses import dataclass, field
 from typing import Dict, Any
-
+import copy
 
 @dataclass
 class SimulationConfig:
@@ -58,7 +58,7 @@ class SimulationConfig:
 
 # 预设配置：
 
-lfr_config = SimulationConfig(
+base_config = SimulationConfig(
     num_agents=500,
     network_type="lfr",
     network_params={
@@ -80,5 +80,7 @@ lfr_config = SimulationConfig(
     # 极化三角框架模型参数保持默认值
 )
 
+high_polarization_config = copy.deepcopy(base_config)
+high_polarization_config.alpha = 0.6
 # 默认使用的配置
-config = lfr_config
+config = base_config
