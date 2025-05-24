@@ -124,26 +124,38 @@ class Simulation:
         if zealot_count <= 0:
             return
         
-        if zealot_count > self.num_agents:
-            zealot_count = self.num_agents
-            print(f"Warning: zealot_count exceeds agent count, setting to {self.num_agents}")
+        # 确定候选agent池
+        if self.config.zealot_identity_allocation:
+            # 只从identity为1的agent中选择
+            candidate_agents = [i for i in range(self.num_agents) if self.identities[i] == 1]
+            if len(candidate_agents) == 0:
+                print("Warning: No agents with identity=1 found for zealot allocation")
+                return
+            if zealot_count > len(candidate_agents):
+                zealot_count = len(candidate_agents)
+                print(f"Warning: zealot_count exceeds agents with identity=1, setting to {len(candidate_agents)}")
+        else:
+            # 从所有agent中选择
+            candidate_agents = list(range(self.num_agents))
+            if zealot_count > self.num_agents:
+                zealot_count = self.num_agents
+                print(f"Warning: zealot_count exceeds agent count, setting to {self.num_agents}")
         
         # 根据模式选择zealots
         if zealot_mode == "random":
-            # 随机选择指定数量的agent作为zealot
-            all_nodes = list(range(self.num_agents))
-            self.zealot_ids = np.random.choice(all_nodes, size=zealot_count, replace=False).tolist()
+            # 从候选池中随机选择指定数量的agent作为zealot
+            self.zealot_ids = np.random.choice(candidate_agents, size=zealot_count, replace=False).tolist()
         
         elif zealot_mode == "degree":
-            # 选择度数最高的节点作为zealot
-            node_degrees = list(self.graph.degree())
+            # 选择候选池中度数最高的节点作为zealot
+            node_degrees = [(node, self.graph.degree(node)) for node in candidate_agents]
             sorted_nodes_by_degree = sorted(node_degrees, key=lambda x: x[1], reverse=True)
             self.zealot_ids = [node for node, degree in sorted_nodes_by_degree[:zealot_count]]
         
         elif zealot_mode == "clustered":
-            # 获取社区信息
+            # 获取候选agents的社区信息
             communities = {}
-            for node in self.graph.nodes():
+            for node in candidate_agents:
                 community = self.graph.nodes[node].get("community")
                 if isinstance(community, (set, frozenset)):
                     community = min(community)

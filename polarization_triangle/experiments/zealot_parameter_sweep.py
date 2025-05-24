@@ -35,10 +35,10 @@ def run_parameter_sweep(
     # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
     
     # 定义参数值范围
-    morality_rates = [0.0]  # moralizing的non-zealot people的比例
+    morality_rates = [0.35]  # moralizing的non-zealot people的比例
     zealot_moralities = [True]  # zealot是否全部moralizing
-    identity_clustered = [True,False]  # 是否按identity进行clustered的初始化
-    zealot_counts = [10]  # zealot的数量
+    identity_clustered = [True]  # 是否按identity进行clustered的初始化
+    zealot_counts = [50]  # zealot的数量
     zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
 
     # 创建所有可能的参数组合
@@ -180,14 +180,18 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
     # 统计数据键列表
     stat_keys = [
         ("mean_opinions", "Mean Opinion", "Mean Opinion Value"),
-        ("mean_abs_opinions", "Mean |Opinion|", "Mean Absolute Opinion Value"),
+        # ("mean_abs_opinions", "Mean |Opinion|", "Mean Absolute Opinion Value"),  # 删除：不需要的图表
         ("non_zealot_variance", "Non-Zealot Variance", "Opinion Variance (Excluding Zealots)"),
         ("cluster_variance", "Cluster Variance", "Mean Opinion Variance within Clusters"),
         ("negative_counts", "Negative Counts", "Number of Agents with Negative Opinions"),
         ("negative_means", "Negative Means", "Mean Value of Negative Opinions"),
         ("positive_counts", "Positive Counts", "Number of Agents with Positive Opinions"),
         ("positive_means", "Positive Means", "Mean Value of Positive Opinions"),
-        ("polarization_index", "Polarization Index", "Koudenburg Polarization Index")
+        ("polarization_index", "Polarization Index", "Koudenburg Polarization Index"),
+        # 新增identity相关统计 - 删除单独的identity统计，只保留特殊处理的综合图表
+        # ("identity_1_mean_opinions", "Identity +1 Mean Opinion", "Mean Opinion for Identity +1"),  # 删除：不需要的图表
+        # ("identity_neg1_mean_opinions", "Identity -1 Mean Opinion", "Mean Opinion for Identity -1"),  # 删除：不需要的图表
+        # ("identity_opinion_differences", "Identity Opinion Difference", "Opinion Difference between Identities")  # 删除：不需要的图表
     ]
     
     # 使用不同颜色和线型
@@ -257,6 +261,79 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         plt.savefig(os.path.join(stats_dir, f"combined_{stat_key}.png"), dpi=300)
         plt.close()
     
+    # 特殊处理：绘制identity综合对比图
+    # 检查是否有identity数据
+    has_identity_data = False
+    for config_name in config_names:
+        if config_name in all_configs_stats:
+            for mode_key in all_configs_stats[config_name]:
+                if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
+                    has_identity_data = True
+                    break
+            if has_identity_data:
+                break
+    
+    if has_identity_data:
+        # 绘制两种identity的平均opinion综合对比图
+        plt.figure(figsize=(20, 10))
+        for i, config_name in enumerate(config_names):
+            if config_name in all_configs_stats:
+                mode_key = list(all_configs_stats[config_name].keys())[0]
+                if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
+                    # Identity = 1的平均opinion（实线）
+                    data_1 = all_configs_stats[config_name][mode_key]["identity_1_mean_opinions"]
+                    plt.plot(
+                        range(len(data_1)), 
+                        data_1, 
+                        label=f'{config_name} - Identity +1',
+                        color=colors[i % len(colors)], 
+                        linestyle='-'
+                    )
+                    # Identity = -1的平均opinion（虚线）
+                    data_neg1 = all_configs_stats[config_name][mode_key]["identity_neg1_mean_opinions"]
+                    plt.plot(
+                        range(len(data_neg1)), 
+                        data_neg1, 
+                        label=f'{config_name} - Identity -1',
+                        color=colors[i % len(colors)], 
+                        linestyle='--'
+                    )
+        
+        plt.xlabel('Step')
+        plt.ylabel('Mean Opinion')
+        plt.title('Comparison of Mean Opinions by Identity across All Parameter Combinations')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(stats_dir, "combined_identity_mean_opinions.png"), dpi=300)
+        plt.close()
+        
+        # 绘制identity意见差值绝对值综合对比图
+        plt.figure(figsize=(15, 10))
+        for i, config_name in enumerate(config_names):
+            if config_name in all_configs_stats:
+                mode_key = list(all_configs_stats[config_name].keys())[0]
+                if "identity_opinion_differences" in all_configs_stats[config_name][mode_key]:
+                    # 计算绝对值
+                    differences = all_configs_stats[config_name][mode_key]["identity_opinion_differences"]
+                    abs_differences = [abs(diff) for diff in differences]
+                    plt.plot(
+                        range(len(abs_differences)), 
+                        abs_differences, 
+                        label=config_name,
+                        color=colors[i % len(colors)], 
+                        linestyle=linestyles[i % len(linestyles)]
+                    )
+        
+        plt.xlabel('Step')
+        plt.ylabel('|Mean Opinion Difference|')
+        plt.title('Comparison of Absolute Mean Opinion Differences between Identities')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(stats_dir, "combined_identity_opinion_differences_abs.png"), dpi=300)
+        plt.close()
+    
     # 保存综合数据到CSV文件
     csv_file = os.path.join(stats_dir, "combined_statistics.csv")
     with open(csv_file, "w") as f:
@@ -318,7 +395,8 @@ def run_zealot_parameter_experiment(
     zealot_count=10,
     zealot_mode="random",
     base_seed=42,
-    output_dir=None
+    output_dir=None,
+    zealot_identity_allocation=True
 ):
     """
     运行多次zealot实验，使用指定的参数配置
@@ -334,6 +412,7 @@ def run_zealot_parameter_experiment(
     zealot_mode -- zealot的初始化配置
     base_seed -- 基础随机种子
     output_dir -- 结果输出目录
+    zealot_identity_allocation -- 是否按identity分配zealot，默认启用，启用时zealot只分配给identity为1的agent
     """
     print(f"Running zealot parameter experiment with parameters:")
     print(f"  - Morality rate: {morality_rate}")
@@ -405,7 +484,8 @@ def run_zealot_parameter_experiment(
             num_zealots=zealot_count,
             zealot_mode=zealot_mode,
             seed=current_seed,
-            output_dir=run_dirs[i]
+            output_dir=run_dirs[i],
+            zealot_identity_allocation=zealot_identity_allocation
         )
         
         # 收集结果

@@ -243,6 +243,44 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
         positive_counts.append(positive_count)
         positive_means.append(np.mean(positive_opinions) if positive_count > 0 else 0)
     
+    # 6. 新增：计算每个时刻两种identity各自的平均opinion以及它们的差值
+    identity_1_mean_opinions = []
+    identity_neg1_mean_opinions = []
+    identity_opinion_differences = []
+    
+    # 找到identity为1和-1的agents（排除zealots）
+    identity_1_agents = []
+    identity_neg1_agents = []
+    
+    for i in range(sim.num_agents):
+        if zealot_ids and i in zealot_ids:
+            continue  # 跳过zealots
+        if sim.identities[i] == 1:
+            identity_1_agents.append(i)
+        elif sim.identities[i] == -1:
+            identity_neg1_agents.append(i)
+    
+    for step_opinions in trajectory:
+        # 计算identity为1的agents的平均opinion
+        if identity_1_agents:
+            identity_1_opinions = step_opinions[identity_1_agents]
+            identity_1_mean = np.mean(identity_1_opinions)
+        else:
+            identity_1_mean = 0.0
+        identity_1_mean_opinions.append(identity_1_mean)
+        
+        # 计算identity为-1的agents的平均opinion
+        if identity_neg1_agents:
+            identity_neg1_opinions = step_opinions[identity_neg1_agents]
+            identity_neg1_mean = np.mean(identity_neg1_opinions)
+        else:
+            identity_neg1_mean = 0.0
+        identity_neg1_mean_opinions.append(identity_neg1_mean)
+        
+        # 计算两种identity平均opinion的差值
+        difference = identity_1_mean - identity_neg1_mean
+        identity_opinion_differences.append(difference)
+
     # 获取极化指数历史
     polarization_history = sim.get_polarization_history() if hasattr(sim, 'get_polarization_history') else []
     
@@ -258,7 +296,11 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
         "positive_means": positive_means,
         "community_variance_history": community_variance_history,
         "communities": communities,
-        "polarization_index": polarization_history  # 添加极化指数历史
+        "polarization_index": polarization_history,  # 添加极化指数历史
+        # 新增identity相关统计
+        "identity_1_mean_opinions": identity_1_mean_opinions,
+        "identity_neg1_mean_opinions": identity_neg1_mean_opinions,
+        "identity_opinion_differences": identity_opinion_differences
     }
     
     # 单独保存每个模式的统计数据到CSV文件
@@ -273,6 +315,8 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
         f.write("negative_count,negative_mean,positive_count,positive_mean")
         if polarization_history:
             f.write(",polarization_index")  # 添加极化指数列
+        # 添加identity相关的列
+        f.write(",identity_1_mean_opinion,identity_neg1_mean_opinion,identity_opinion_difference")
         f.write("\n")
         
         for step in range(num_steps):
@@ -283,6 +327,10 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
             # 如果有极化指数数据，添加到CSV
             if polarization_history and step < len(polarization_history):
                 f.write(f",{polarization_history[step]:.4f}")
+            # 添加identity相关数据
+            f.write(f",{identity_1_mean_opinions[step]:.4f}")
+            f.write(f",{identity_neg1_mean_opinions[step]:.4f}")
+            f.write(f",{identity_opinion_differences[step]:.4f}")
             f.write("\n")
     
     # 保存每个社区的方差数据到单独的CSV文件
@@ -303,17 +351,6 @@ def generate_opinion_statistics(sim, trajectory, zealot_ids, mode_name, results_
                 else:
                     f.write(",0.0000")  # 防止索引越界
             f.write("\n")
-    
-    # 如果有极化指数数据，绘制极化指数随时间变化图
-    if polarization_history:
-        plt.figure(figsize=(12, 7))
-        plt.plot(range(len(polarization_history)), polarization_history, 'b-', linewidth=2)
-        plt.xlabel('Step')
-        plt.ylabel('Polarization Index')
-        plt.title(f'Polarization Index over Time\n{mode_name}')
-        plt.grid(True)
-        plt.savefig(os.path.join(stats_dir, f"{file_prefix}_polarization_index.png"), dpi=300)
-        plt.close()
     
     return stats
 
@@ -524,7 +561,50 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
         plt.savefig(os.path.join(stats_dir, "comparison_polarization_index.png"), dpi=300)
         plt.close()
     
-    # 10. 保存组合数据到CSV文件
+    # 10. 新增：绘制identity平均意见对比图
+    has_identity_data = all(
+        "identity_1_mean_opinions" in all_stats[mode] and "identity_neg1_mean_opinions" in all_stats[mode]
+        for mode in mode_names
+    )
+    
+    if has_identity_data:
+        # 10a. 两种identity的平均opinion对比图
+        plt.figure(figsize=(15, 7))
+        for i, mode in enumerate(mode_names):
+            # Identity = 1的平均opinion（实线）
+            plt.plot(steps, all_stats[mode]["identity_1_mean_opinions"], 
+                    label=f'{mode} - Identity +1', 
+                    color=colors[i], linestyle='-')
+            # Identity = -1的平均opinion（虚线）
+            plt.plot(steps, all_stats[mode]["identity_neg1_mean_opinions"], 
+                    label=f'{mode} - Identity -1', 
+                    color=colors[i], linestyle='--')
+        plt.xlabel('Step')
+        plt.ylabel('Mean Opinion')
+        plt.title('Comparison of Mean Opinions by Identity across Different Simulations')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(stats_dir, "comparison_identity_mean_opinions.png"), dpi=300)
+        plt.close()
+        
+        # 10b. identity意见差值绝对值对比图
+        plt.figure(figsize=(12, 7))
+        for i, mode in enumerate(mode_names):
+            # 计算绝对值
+            abs_differences = [abs(diff) for diff in all_stats[mode]["identity_opinion_differences"]]
+            plt.plot(steps, abs_differences, 
+                    label=f'{mode}', 
+                    color=colors[i], linestyle='-')
+        plt.xlabel('Step')
+        plt.ylabel('|Mean Opinion Difference|')
+        plt.title('Comparison of Absolute Mean Opinion Differences between Identities')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(stats_dir, "comparison_identity_opinion_differences_abs.png"), dpi=300)
+        plt.close()
+    
+    # 11. 保存组合数据到CSV文件
     stats_csv = os.path.join(stats_dir, "comparison_opinion_stats.csv")
     with open(stats_csv, "w") as f:
         # 写入标题行
@@ -534,6 +614,9 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
             f.write(f",{mode}_negative_count,{mode}_negative_mean,{mode}_positive_count,{mode}_positive_mean")
             if "polarization_index" in all_stats[mode] and len(all_stats[mode]["polarization_index"]) > 0:
                 f.write(f",{mode}_polarization_index")
+            # 添加identity相关的列
+            if "identity_1_mean_opinions" in all_stats[mode]:
+                f.write(f",{mode}_identity_1_mean_opinion,{mode}_identity_neg1_mean_opinion,{mode}_identity_opinion_difference")
         f.write("\n")
         
         # 写入数据
@@ -551,6 +634,11 @@ def plot_comparative_statistics(all_stats, mode_names, results_dir):
                 # 如果有极化指数数据，添加到CSV
                 if "polarization_index" in all_stats[mode] and step < len(all_stats[mode]["polarization_index"]):
                     f.write(f",{all_stats[mode]['polarization_index'][step]:.4f}")
+                # 添加identity相关数据
+                if "identity_1_mean_opinions" in all_stats[mode] and step < len(all_stats[mode]["identity_1_mean_opinions"]):
+                    f.write(f",{all_stats[mode]['identity_1_mean_opinions'][step]:.4f}")
+                    f.write(f",{all_stats[mode]['identity_neg1_mean_opinions'][step]:.4f}")
+                    f.write(f",{all_stats[mode]['identity_opinion_differences'][step]:.4f}")
             f.write("\n")
 
 
@@ -663,7 +751,8 @@ def run_zealot_experiment(
     morality_rate=0.0, 
     zealot_morality=False, 
     identity_clustered=False,
-    zealot_mode=None
+    zealot_mode=None,
+    zealot_identity_allocation=True
 ):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
@@ -678,6 +767,7 @@ def run_zealot_experiment(
     zealot_morality -- zealot是否全部moralizing
     identity_clustered -- 是否按identity进行clustered的初始化
     zealot_mode -- zealot的初始化配置 ("none", "clustered", "random", "high-degree")，若为None则运行所有模式
+    zealot_identity_allocation -- 是否按identity分配zealot，默认启用，启用时zealot只分配给identity为1的agent
     
     返回:
     dict -- 包含所有模式结果的字典
@@ -734,6 +824,7 @@ def run_zealot_experiment(
         clustered_config.zealot_count = num_zealots
         clustered_config.zealot_mode = "clustered"
         clustered_config.zealot_morality = zealot_morality
+        clustered_config.zealot_identity_allocation = zealot_identity_allocation
         sims["clustered"] = Simulation(clustered_config)
         sims["clustered"].opinions *= initial_scale
         sims["clustered"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
@@ -745,6 +836,7 @@ def run_zealot_experiment(
         random_config.zealot_count = num_zealots
         random_config.zealot_mode = "random"
         random_config.zealot_morality = zealot_morality
+        random_config.zealot_identity_allocation = zealot_identity_allocation
         sims["random"] = Simulation(random_config)
         sims["random"].opinions *= initial_scale
         sims["random"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
@@ -756,6 +848,7 @@ def run_zealot_experiment(
         degree_config.zealot_count = num_zealots
         degree_config.zealot_mode = "degree"
         degree_config.zealot_morality = zealot_morality
+        degree_config.zealot_identity_allocation = zealot_identity_allocation
         sims["high-degree"] = Simulation(degree_config)
         sims["high-degree"].opinions *= initial_scale
         sims["high-degree"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
@@ -889,5 +982,6 @@ if __name__ == "__main__":
         morality_rate=0.0,     # 道德化率
         zealot_morality=False,  # 不全部moralizing
         identity_clustered=False, # 不按identity进行clustered的初始化
-        zealot_mode=None        # 运行所有模式
+        zealot_mode=None,       # 运行所有模式
+        zealot_identity_allocation=True
     ) 

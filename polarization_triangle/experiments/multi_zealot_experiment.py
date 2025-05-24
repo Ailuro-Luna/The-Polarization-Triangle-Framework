@@ -17,7 +17,8 @@ def run_multi_zealot_experiment(
     zealot_count=50,
     zealot_mode=None,
     base_seed=42,
-    output_dir=None
+    output_dir=None,
+    zealot_identity_allocation=True
 ):
     """
     运行多次zealot实验，并计算平均结果
@@ -33,6 +34,7 @@ def run_multi_zealot_experiment(
     zealot_mode -- zealot的初始化配置 ("none", "clustered", "random", "high-degree")，若为None则运行所有模式
     base_seed -- 基础随机种子，每次运行会使用不同的种子
     output_dir -- 结果输出目录
+    zealot_identity_allocation -- 是否按identity分配zealot，默认启用，启用时zealot只分配给identity为1的agent
     """
     print(f"Running multi-zealot experiment with {runs} runs...")
     print(f"Parameters: morality_rate={morality_rate}, zealot_morality={zealot_morality}, identity_clustered={identity_clustered}")
@@ -110,7 +112,8 @@ def run_multi_zealot_experiment(
             morality_rate=morality_rate,
             zealot_morality=zealot_morality,
             identity_clustered=identity_clustered,
-            zealot_mode=zealot_mode
+            zealot_mode=zealot_mode,
+            zealot_identity_allocation=zealot_identity_allocation
         )
         
         # 收集结果
@@ -159,7 +162,9 @@ def average_stats(stats_list):
     stat_keys = [
         "mean_opinions", "mean_abs_opinions", "non_zealot_variance", 
         "cluster_variance", "negative_counts", "negative_means", 
-        "positive_counts", "positive_means", "polarization_index"
+        "positive_counts", "positive_means", "polarization_index",
+        # 新增identity相关统计
+        "identity_1_mean_opinions", "identity_neg1_mean_opinions", "identity_opinion_differences"
     ]
     
     # 初始化每个统计数据的数组
@@ -410,7 +415,50 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
         plt.savefig(os.path.join(stats_dir, "avg_polarization_index.png"), dpi=300)
         plt.close()
     
-    # 10. 保存平均统计数据到CSV文件
+    # 10. 新增：绘制identity平均意见对比图
+    has_identity_data = all(
+        "identity_1_mean_opinions" in avg_stats[mode] and "identity_neg1_mean_opinions" in avg_stats[mode]
+        for mode in mode_names
+    )
+    
+    if has_identity_data:
+        # 10a. 两种identity的平均opinion对比图
+        plt.figure(figsize=(15, 7))
+        for i, mode in enumerate(mode_names):
+            # Identity = 1的平均opinion（实线）
+            plt.plot(step_values, avg_stats[mode]["identity_1_mean_opinions"], 
+                    label=f'{mode} - Identity +1', 
+                    color=colors[i], linestyle='-')
+            # Identity = -1的平均opinion（虚线）
+            plt.plot(step_values, avg_stats[mode]["identity_neg1_mean_opinions"], 
+                    label=f'{mode} - Identity -1', 
+                    color=colors[i], linestyle='--')
+        plt.xlabel('Step')
+        plt.ylabel('Mean Opinion')
+        plt.title('Average Mean Opinions by Identity across Different Simulations')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(stats_dir, "avg_identity_mean_opinions.png"), dpi=300)
+        plt.close()
+        
+        # 10b. identity意见差值绝对值对比图
+        plt.figure(figsize=(12, 7))
+        for i, mode in enumerate(mode_names):
+            # 计算绝对值
+            abs_differences = [abs(diff) for diff in avg_stats[mode]["identity_opinion_differences"]]
+            plt.plot(step_values, abs_differences, 
+                    label=f'{mode}', 
+                    color=colors[i], linestyle='-')
+        plt.xlabel('Step')
+        plt.ylabel('|Mean Opinion Difference|')
+        plt.title('Average Absolute Mean Opinion Differences between Identities')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(stats_dir, "avg_identity_opinion_differences_abs.png"), dpi=300)
+        plt.close()
+    
+    # 11. 保存平均统计数据到CSV文件
     stats_csv = os.path.join(stats_dir, "avg_opinion_stats.csv")
     with open(stats_csv, "w") as f:
         # 写入标题行
@@ -420,6 +468,9 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
             f.write(f",{mode}_negative_count,{mode}_negative_mean,{mode}_positive_count,{mode}_positive_mean")
             if "polarization_index" in avg_stats[mode] and len(avg_stats[mode]["polarization_index"]) > 0:
                 f.write(f",{mode}_polarization_index")
+            # 添加identity相关的列
+            if "identity_1_mean_opinions" in avg_stats[mode]:
+                f.write(f",{mode}_identity_1_mean_opinion,{mode}_identity_neg1_mean_opinion,{mode}_identity_opinion_difference")
         f.write("\n")
         
         # 写入数据
@@ -437,6 +488,11 @@ def plot_average_statistics(avg_stats, mode_names, output_dir, steps):
                 # 如果有极化指数数据，添加到CSV
                 if "polarization_index" in avg_stats[mode] and step < len(avg_stats[mode]["polarization_index"]):
                     f.write(f",{avg_stats[mode]['polarization_index'][step]:.4f}")
+                # 添加identity相关数据
+                if "identity_1_mean_opinions" in avg_stats[mode] and step < len(avg_stats[mode]["identity_1_mean_opinions"]):
+                    f.write(f",{avg_stats[mode]['identity_1_mean_opinions'][step]:.4f}")
+                    f.write(f",{avg_stats[mode]['identity_neg1_mean_opinions'][step]:.4f}")
+                    f.write(f",{avg_stats[mode]['identity_opinion_differences'][step]:.4f}")
             f.write("\n")
 
 

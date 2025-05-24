@@ -49,6 +49,7 @@ class SimulationConfig:
     zealot_opinion: float = 1.0  # zealot固定的意见值
     enable_zealots: bool = False  # 是否启用zealot功能
     zealot_morality: bool = False  # zealot是否全部设置为moralizing (morality=1)
+    zealot_identity_allocation: bool = True  # 是否按identity分配zealot，默认启用，启用时zealot只分配给identity为1的agent
     
     # 极化三角框架模型参数
     delta: float = 1  # 意见衰减率
