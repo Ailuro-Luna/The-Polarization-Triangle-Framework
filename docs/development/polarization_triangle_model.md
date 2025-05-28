@@ -23,10 +23,22 @@ $A_{ij}$ 的定义，其中 $a_{ij}$ 是 adjacency matrix 的值:
 
 $$A_{ij} = 
 \begin{cases}
--a_{ij}, & \text{如果 } l_i = -l_j \text{ 且 } m_i, m_j = 1 \text{ 且 } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
-\frac{a_{ij}}{\sigma_{ji}} \tilde{\sigma}_{sameIdentity}, & \text{如果 } l_i = l_j \text{ 且 } m_i, m_j = 1 \text{ 且 } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
-a_{ij}, & \text{其他情况}
+-a_{ij} + c_{ij}, & \text{如果 } l_i = -l_j \text{ 且 } m_i, m_j = 1 \text{ 且 } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
+\frac{a_{ij}}{\sigma_{ij}} \tilde{\sigma}_{sameIdentity}, & \text{如果 } l_i = l_j \text{ 且 } m_i, m_j = 1 \text{ 且 } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
+a_{ij} + c_{ij}, & \text{其他情况}
 \end{cases}$$
+
+其中:
+- $a_{ij}$ 是邻接矩阵的值
+- $\tilde{\sigma}_{sameIdentity}$ 是同身份邻居的平均感知意见值
+- $c_{ij}$ 是凝聚力因子 (cohesion factor)，定义为:
+  $$c_{ij} = \begin{cases}
+  \text{cohesion\_factor}, & \text{如果 } l_i = l_j \\
+  0, & \text{如果 } l_i \neq l_j
+  \end{cases}$$
+
+#### 凝聚力因子的作用
+凝聚力因子增强了相同身份 agents 之间的关系强度，促进群体内部凝聚，同时对跨身份交互保持中性效果。
 
 ## 意见动态方程 (Opinion Dynamics)
 

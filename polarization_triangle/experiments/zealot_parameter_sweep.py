@@ -35,10 +35,10 @@ def run_parameter_sweep(
     # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
     
     # 定义参数值范围
-    morality_rates = [0.35]  # moralizing的non-zealot people的比例
+    morality_rates = [0, 0.3]  # moralizing的non-zealot people的比例
     zealot_moralities = [True]  # zealot是否全部moralizing
     identity_clustered = [True]  # 是否按identity进行clustered的初始化
-    zealot_counts = [50]  # zealot的数量
+    zealot_counts = [20]  # zealot的数量
     zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
 
     # 创建所有可能的参数组合
@@ -187,7 +187,7 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         ("negative_means", "Negative Means", "Mean Value of Negative Opinions"),
         ("positive_counts", "Positive Counts", "Number of Agents with Positive Opinions"),
         ("positive_means", "Positive Means", "Mean Value of Positive Opinions"),
-        ("polarization_index", "Polarization Index", "Koudenburg Polarization Index"),
+        ("polarization_index", "Polarization Index", "Polarization Index"),
         # 新增identity相关统计 - 删除单独的identity统计，只保留特殊处理的综合图表
         # ("identity_1_mean_opinions", "Identity +1 Mean Opinion", "Mean Opinion for Identity +1"),  # 删除：不需要的图表
         # ("identity_neg1_mean_opinions", "Identity -1 Mean Opinion", "Mean Opinion for Identity -1"),  # 删除：不需要的图表
@@ -470,23 +470,46 @@ def run_zealot_parameter_experiment(
     for i in tqdm(range(runs), desc="Running experiments"):
         # 为每次运行使用不同的随机种子
         current_seed = base_seed + i
+        # 为网络结构使用不同的种子，确保每次运行都有不同的网络
+        network_seed = base_seed + i * 1000  # 使用更大的间隔避免种子冲突
         
         # 在单独的目录中运行实验，使用新的内置zealot功能
-        print(f"\nRun {i+1}/{runs} with seed {current_seed}")
+        print(f"\nRun {i+1}/{runs} with seed {current_seed}, network_seed {network_seed}")
         
-        # 运行指定的模式，使用新的内置zealot功能
-        result = run_zealot_experiment(
-            steps=steps,
-            initial_scale=initial_scale,
-            morality_rate=morality_rate,
-            zealot_morality=zealot_morality,
-            identity_clustered=identity_clustered,
-            num_zealots=zealot_count,
-            zealot_mode=zealot_mode,
-            seed=current_seed,
-            output_dir=run_dirs[i],
-            zealot_identity_allocation=zealot_identity_allocation
-        )
+        # 添加重试机制，防止LFR网络生成失败
+        max_retries = 5
+        retry_count = 0
+        result = None
+        
+        while retry_count < max_retries:
+            try:
+                # 运行指定的模式，使用新的内置zealot功能，并传递网络种子
+                result = run_zealot_experiment(
+                    steps=steps,
+                    initial_scale=initial_scale,
+                    morality_rate=morality_rate,
+                    zealot_morality=zealot_morality,
+                    identity_clustered=identity_clustered,
+                    num_zealots=zealot_count,
+                    zealot_mode=zealot_mode,
+                    seed=current_seed,
+                    network_seed=network_seed + retry_count * 100,  # 每次重试使用不同的网络种子
+                    output_dir=run_dirs[i],
+                    zealot_identity_allocation=zealot_identity_allocation
+                )
+                break  # 成功则跳出重试循环
+            except Exception as e:
+                retry_count += 1
+                print(f"Attempt {retry_count} failed with error: {str(e)}")
+                if retry_count < max_retries:
+                    print(f"Retrying with different network seed...")
+                else:
+                    print(f"All {max_retries} attempts failed. Skipping this run.")
+                    break
+        
+        if result is None:
+            print(f"Skipping run {i+1} due to repeated failures.")
+            continue
         
         # 收集结果
         run_results.append(result)

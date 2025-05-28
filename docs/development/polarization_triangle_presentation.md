@@ -51,12 +51,22 @@ def calculate_perceived_opinion(self, i, j):
 
 $$A_{ij} = 
 \begin{cases}
--a_{ij}, & \text{if } l_i = -l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
+-a_{ij} + c_{ij}, & \text{if } l_i = -l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
 \frac{a_{ij}}{\sigma_{ij}} \tilde{\sigma}_{sameIdentity}, & \text{if } l_i = l_j \text{ and } m_i, m_j = 1 \text{ and } \sigma_{ij} \cdot \sigma_{ji} < 0 \\
-a_{ij}, & \text{otherwise}
+a_{ij} + c_{ij}, & \text{otherwise}
 \end{cases}$$
 
-Where $a_{ij}$ is the adjacency matrix value and $\tilde{\sigma}_{sameIdentity}$ is the average perceived opinion of neighbors with same identity.
+Where:
+- $a_{ij}$ is the adjacency matrix value
+- $\tilde{\sigma}_{sameIdentity}$ is the average perceived opinion of neighbors with same identity
+- $c_{ij}$ is the cohesion factor, defined as:
+  $$c_{ij} = \begin{cases}
+  \text{cohesion\_factor}, & \text{if } l_i = l_j \\
+  0, & \text{if } l_i \neq l_j
+  \end{cases}$$
+
+### Cohesion Factor Effect
+The cohesion factor enhances relationship strength between agents with the same identity, promoting in-group cohesion while maintaining neutral effects for cross-identity interactions.
 
 ---
 
@@ -76,14 +86,15 @@ $$
 
 ## Current Parameter Values
 
-From `simulation.py`:
+From `config.py` (default values):
 ```python
-# Model parameters
-self.delta = 0.1    # Opinion decay rate
-self.u = np.ones(self.num_agents) * 0.1  # Opinion activation coefficient
-self.alpha = np.ones(self.num_agents) * 0.5  # Self-activation coefficient
-self.beta = 0.5     # Social influence coefficient
-self.gamma = np.ones(self.num_agents) * 0.5  # Moralization impact coefficient
+# Polarization Triangle Framework model parameters
+delta: float = 1          # Opinion decay rate
+u: float = 1              # Opinion activation coefficient
+alpha: float = 0.4        # Self-activation coefficient
+beta: float = 0.12        # Social influence coefficient
+gamma: float = 1          # Moralization impact coefficient
+cohesion_factor: float = 0.2  # Identity cohesion factor
 ```
 
 ---

@@ -752,7 +752,8 @@ def run_zealot_experiment(
     zealot_morality=False, 
     identity_clustered=False,
     zealot_mode=None,
-    zealot_identity_allocation=True
+    zealot_identity_allocation=True,
+    network_seed=None
 ):
     """
     运行zealot实验，比较无zealot、聚类zealot和随机zealot的影响
@@ -768,6 +769,7 @@ def run_zealot_experiment(
     identity_clustered -- 是否按identity进行clustered的初始化
     zealot_mode -- zealot的初始化配置 ("none", "clustered", "random", "high-degree")，若为None则运行所有模式
     zealot_identity_allocation -- 是否按identity分配zealot，默认启用，启用时zealot只分配给identity为1的agent
+    network_seed -- 网络生成的随机种子，如果为None则使用seed
     
     返回:
     dict -- 包含所有模式结果的字典
@@ -786,11 +788,40 @@ def run_zealot_experiment(
     base_config.opinion_distribution = "uniform"
     base_config.alpha = 0.4
     base_config.beta = 0.12
+    
+    # 设置网络种子，添加重试机制防止LFR网络生成失败
+    if network_seed is not None:
+        base_config.network_params["seed"] = network_seed
+    
     print(base_config)
     # 设置道德化率
     base_config.morality_rate = morality_rate
     
+    # 添加网络生成重试机制
+    max_network_retries = 5
+    network_retry_count = 0
+    base_sim = None
+    
+    while network_retry_count < max_network_retries:
+        try:
     base_sim = Simulation(base_config)
+            break  # 成功创建则跳出循环
+        except Exception as e:
+            network_retry_count += 1
+            print(f"Network generation attempt {network_retry_count} failed: {str(e)}")
+            if network_retry_count < max_network_retries:
+                # 尝试使用不同的网络种子
+                if network_seed is not None:
+                    base_config.network_params["seed"] = network_seed + network_retry_count * 100
+                else:
+                    base_config.network_params["seed"] = seed + network_retry_count * 100
+                print(f"Retrying with network seed: {base_config.network_params['seed']}")
+            else:
+                print(f"All {max_network_retries} network generation attempts failed.")
+                raise e
+    
+    if base_sim is None:
+        raise RuntimeError("Failed to create base simulation after multiple attempts")
     
     # 缩放所有代理的初始意见
     base_sim.opinions *= initial_scale
@@ -825,6 +856,9 @@ def run_zealot_experiment(
         clustered_config.zealot_mode = "clustered"
         clustered_config.zealot_morality = zealot_morality
         clustered_config.zealot_identity_allocation = zealot_identity_allocation
+        # 确保网络种子一致
+        if network_seed is not None:
+            clustered_config.network_params["seed"] = network_seed
         sims["clustered"] = Simulation(clustered_config)
         sims["clustered"].opinions *= initial_scale
         sims["clustered"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
@@ -837,6 +871,9 @@ def run_zealot_experiment(
         random_config.zealot_mode = "random"
         random_config.zealot_morality = zealot_morality
         random_config.zealot_identity_allocation = zealot_identity_allocation
+        # 确保网络种子一致
+        if network_seed is not None:
+            random_config.network_params["seed"] = network_seed
         sims["random"] = Simulation(random_config)
         sims["random"].opinions *= initial_scale
         sims["random"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放
@@ -849,6 +886,9 @@ def run_zealot_experiment(
         degree_config.zealot_mode = "degree"
         degree_config.zealot_morality = zealot_morality
         degree_config.zealot_identity_allocation = zealot_identity_allocation
+        # 确保网络种子一致
+        if network_seed is not None:
+            degree_config.network_params["seed"] = network_seed
         sims["high-degree"] = Simulation(degree_config)
         sims["high-degree"].opinions *= initial_scale
         sims["high-degree"].set_zealot_opinions()  # 重新设置zealot意见，避免被缩放

@@ -37,6 +37,8 @@ polarization_triangle/
 │   ├── morality_test.py      # 道德化率测试
 │   ├── model_params_test.py  # 模型参数测试
 │   ├── activation_analysis.py# 激活组件分析
+│   ├── zealot_experiment.py  # Zealot实验
+│   ├── zealot_parameter_sweep.py # Zealot参数扫描
 ├── scripts/                  # 脚本模块
 │   ├── run_basic_simulation.py    # 运行基本模拟
 │   ├── run_model_params_test.py   # 运行模型参数测试
@@ -49,6 +51,8 @@ polarization_triangle/
 │   ├── alpha_analysis.py     # alpha参数验证
 │   ├── alphabeta_analysis.py # alpha和beta参数验证
 │   ├── agent_interaction_verification.py # 代理交互验证
+├── docs/                     # 文档目录
+│   ├── network_randomization.md   # 网络结构随机化实现文档
 ├── main.py                   # 主入口文件
 ```
 
@@ -88,6 +92,8 @@ polarization_triangle/
 提供网络创建和处理相关的工具函数：
 - `create_network`: 创建不同类型的网络（随机网络、小世界网络、无标度网络、社区网络等）
 - `handle_isolated_nodes`: 处理网络中的孤立节点
+
+**网络结构随机化**: 框架支持网络结构的随机化，通过网络种子（network seed）系统确保每次实验运行都能生成不同的网络拓扑结构。详细的实现机制请参考 [`docs/network_randomization.md`](docs/network_randomization.md)。
 
 ### utils/data_manager.py
 
@@ -147,6 +153,8 @@ polarization_triangle/
 - `morality_test.py`: 实现对不同道德化率的参数扫描测试
 - `model_params_test.py`: 实现对模型关键参数的参数扫描测试
 - `activation_analysis.py`: 实现对激活组件（自我激活和社会影响）的分析
+- `zealot_experiment.py`: 实现Zealot实验
+- `zealot_parameter_sweep.py`: 实现Zealot参数扫描
 
 ## 验证模块说明
 

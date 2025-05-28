@@ -35,6 +35,7 @@ def create_network(num_agents: int, network_type: str, network_params: Dict[str,
         mu = network_params.get("mu", 0.1)
         average_degree = network_params.get("average_degree", 5)
         min_community = network_params.get("min_community", 10)
+        seed = network_params.get("seed", 42)
         return nx.LFR_benchmark_graph(
             n=num_agents,
             tau1=tau1,
@@ -42,7 +43,7 @@ def create_network(num_agents: int, network_type: str, network_params: Dict[str,
             mu=mu,
             average_degree=average_degree,
             min_community=min_community,
-            seed=42
+            seed=seed
         )
     elif network_type == 'community':
         community_sizes = [num_agents // 4] * 4
