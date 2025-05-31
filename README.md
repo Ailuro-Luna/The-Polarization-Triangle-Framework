@@ -24,6 +24,7 @@ polarization_triangle/
 ├── analysis/                 # 分析模块
 │   ├── trajectory.py         # 轨迹数据分析
 │   ├── activation.py         # 激活组件分析
+│   ├── statistics.py         # 统计分析工具
 ├── visualization/            # 可视化模块
 │   ├── network_viz.py        # 网络可视化
 │   ├── opinion_viz.py        # 意见分布可视化
@@ -51,6 +52,12 @@ polarization_triangle/
 │   ├── alpha_analysis.py     # alpha参数验证
 │   ├── alphabeta_analysis.py # alpha和beta参数验证
 │   ├── agent_interaction_verification.py # 代理交互验证
+├── examples/                 # 示例模块
+│   ├── statistics_example.py      # 统计分析模块使用示例
+│   ├── run_all_examples.py        # 一键运行所有示例
+├── tests/                    # 测试模块
+│   ├── test_statistics.py         # 统计模块测试
+│   ├── run_all_tests.py           # 一键运行所有测试
 ├── docs/                     # 文档目录
 │   ├── network_randomization.md   # 网络结构随机化实现文档
 ├── main.py                   # 主入口文件
@@ -115,6 +122,16 @@ polarization_triangle/
 - 自我激活和社会影响分析
 - 组件贡献度计算
 
+### analysis/statistics.py
+
+提供系统统计分析相关的功能：
+- `calculate_mean_opinion`: 计算系统平均意见统计
+- `calculate_variance_metrics`: 计算各种方差指标
+- `calculate_identity_statistics`: 计算按身份分组的统计指标
+- `get_polarization_index`: 获取极化指数
+- `get_comprehensive_statistics`: 获取综合统计信息
+- `export_statistics_to_dict`: 导出统计数据为字典格式
+
 ## 可视化模块说明
 
 ### visualization/network_viz.py
@@ -162,6 +179,66 @@ polarization_triangle/
 - `alphabeta_analysis.py`: 实现对alpha和beta参数（社会影响系数）的联合验证和分析
 - `agent_interaction_verification.py`: 实现对代理间交互规则的验证和测试，包括16种基本交互场景
 
+## 示例模块说明
+
+示例模块提供了完整的使用案例，帮助用户快速上手各种功能：
+
+### examples/statistics_example.py
+
+展示了如何使用统计分析模块的完整示例：
+- 创建和配置simulation
+- 使用各种统计分析函数
+- 比较包含和排除zealots的统计结果
+- 演示四种不同的使用方式
+
+### examples/run_all_examples.py
+
+提供一键运行所有示例的功能：
+```bash
+# 运行所有示例
+python polarization_triangle/examples/run_all_examples.py
+
+# 交互模式：选择运行特定示例
+python polarization_triangle/examples/run_all_examples.py -i
+
+# 查看帮助
+python polarization_triangle/examples/run_all_examples.py -h
+```
+
+## 测试模块说明
+
+测试模块确保代码质量和功能正确性：
+
+### tests/test_statistics.py
+
+包含对统计分析模块的完整测试套件：
+- 测试平均意见计算功能
+- 测试方差指标计算功能
+- 测试身份统计功能
+- 测试极化指数计算功能
+- 测试综合统计功能
+- 测试数据导出功能
+- 测试zealot排除功能
+
+### tests/run_all_tests.py
+
+提供一键运行所有测试的功能：
+```bash
+# 运行所有测试
+python polarization_triangle/tests/run_all_tests.py
+
+# 快速测试模式（仅基本功能验证）
+python polarization_triangle/tests/run_all_tests.py -q
+
+# 交互模式：选择运行特定测试
+python polarization_triangle/tests/run_all_tests.py -i
+
+# 查看帮助
+python polarization_triangle/tests/run_all_tests.py -h
+```
+
+测试结果将显示详细的通过/失败状态，帮助开发者确保代码质量。
+
 ## 使用方法
 
 ### 安装依赖
@@ -182,6 +259,32 @@ pip install -r requirements.txt
 - scipy
 - pandas
 - tqdm
+
+### 快速开始
+
+#### 1. 运行示例代码
+
+最快的上手方式是运行示例代码：
+
+```bash
+# 运行统计分析示例
+python polarization_triangle/examples/statistics_example.py
+
+# 运行所有示例
+python polarization_triangle/examples/run_all_examples.py
+```
+
+#### 2. 运行测试验证
+
+确保环境配置正确：
+
+```bash
+# 快速测试基本功能
+python polarization_triangle/tests/run_all_tests.py -q
+
+# 运行完整测试套件
+python polarization_triangle/tests/run_all_tests.py
+```
 
 ### 基本用法
 
@@ -308,6 +411,27 @@ for _ in range(100):
 sim.save_simulation_data("my_results", "custom_sim")
 ```
 
+### 使用统计分析模块
+
+```python
+from polarization_triangle.analysis.statistics import (
+    print_statistics_summary,
+    get_comprehensive_statistics,
+    calculate_mean_opinion
+)
+
+# 方法1：快速查看统计摘要
+print_statistics_summary(sim)
+
+# 方法2：获取详细统计数据
+stats = get_comprehensive_statistics(sim)
+mean_opinion = stats['mean_opinion_stats']['mean_opinion']
+polarization = stats['polarization_index']
+
+# 方法3：分别计算特定指标
+mean_stats = calculate_mean_opinion(sim, exclude_zealots=True)
+```
+
 ## 结果分析
 
 模拟结果将保存为CSV文件，包括：
@@ -323,12 +447,42 @@ sim.save_simulation_data("my_results", "custom_sim")
 - 网络结构可视化图
 - 验证结果对比图
 
-## 贡献与开发
+## 开发指南
+
+### 运行测试
+
+在开发过程中，建议经常运行测试以确保代码质量：
+
+```bash
+# 快速测试基本功能
+python polarization_triangle/tests/run_all_tests.py -q
+
+# 运行完整测试套件
+python polarization_triangle/tests/run_all_tests.py
+
+# 运行特定测试
+python polarization_triangle/tests/test_statistics.py
+```
+
+### 查看示例
+
+通过运行示例代码了解最佳实践：
+
+```bash
+# 查看所有可用示例
+python polarization_triangle/examples/run_all_examples.py
+
+# 运行特定示例
+python polarization_triangle/examples/statistics_example.py
+```
+
+### 贡献代码
 
 欢迎贡献代码、报告问题或提出改进建议。如需开发，请遵循以下建议：
 - 使用类型注解来提高代码可读性
 - 添加详细的文档字符串
-- 编写测试用例确保功能正确
+- 为新功能编写测试用例
+- 在examples文件夹中添加使用示例
 - 遵循项目的代码风格和结构
 
 ## 许可证
