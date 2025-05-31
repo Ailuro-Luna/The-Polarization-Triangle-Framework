@@ -804,7 +804,7 @@ def run_zealot_experiment(
     
     while network_retry_count < max_network_retries:
         try:
-    base_sim = Simulation(base_config)
+            base_sim = Simulation(base_config)
             break  # 成功创建则跳出循环
         except Exception as e:
             network_retry_count += 1

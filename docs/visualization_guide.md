@@ -39,19 +39,26 @@ draw_opinion_distribution_heatmap(
 ```python
 # multi_zealot_experiment.py 中的函数
 def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir):
-    # ...
     for mode in mode_names:
-        # ...
-        avg_history = calculate_average_opinion_history(mode_histories)
+        mode_histories = all_opinion_histories[mode]
+        if not mode_histories:
+            continue
+        
+        # 计算平均意见分布（对每个时刻的opinion分布直方图求平均）
+        avg_distribution = calculate_average_opinion_distribution(mode_histories)
+        
+        # 绘制平均热图
         heatmap_file = os.path.join(output_dir, f"avg_{mode.lower().replace(' ', '_')}_heatmap.png")
-        draw_opinion_distribution_heatmap(
-            avg_history,
-            f"Average Opinion Evolution {mode} (Multiple Runs)",
+        draw_opinion_distribution_heatmap_from_distribution(
+            avg_distribution,
+            f"Average Opinion Distribution Evolution {mode} (Multiple Runs)",
             heatmap_file,
             bins=40,
             log_scale=True
         )
 ```
+
+**关键改进**: 新的实现方式改为对每个时刻的opinion分布直方图求平均，而不是对每个节点的opinion轨迹求平均。这样能更准确地反映平均的"持有特定opinion的agent个数"随时间的变化。
 
 ## 2. 平均方差图表
 

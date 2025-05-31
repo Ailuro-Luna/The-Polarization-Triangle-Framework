@@ -16,7 +16,8 @@ def draw_opinion_distribution(sim, title, filename, bins=20):
     plt.close()
 
 
-def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_scale=True):
+def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_scale=False, 
+                                      cmap='viridis', vmin=None, vmax=None, custom_norm=None):
     """
     绘制三维热力图，展示opinion分布随时间的变化。
 
@@ -26,6 +27,10 @@ def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_sca
     filename -- 保存文件名
     bins -- opinion值的分箱数量
     log_scale -- 是否使用对数比例表示颜色，对于凸显小峰值很有用
+    cmap -- 颜色映射方案 ('viridis', 'plasma', 'inferno', 'magma', 'coolwarm', 'RdBu', 'hot', 'jet', etc.)
+    vmin -- 颜色尺度的最小值，如果为None则自动确定
+    vmax -- 颜色尺度的最大值，如果为None则自动确定
+    custom_norm -- 自定义的颜色标准化对象，如果提供则会覆盖log_scale、vmin、vmax
     """
     # 转换为numpy数组确保兼容性
     history = np.array(history)
@@ -52,18 +57,42 @@ def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_sca
     x = opinion_bins[:-1] + np.diff(opinion_bins) / 2  # opinion值（bin中点）
     y = np.arange(time_steps)  # 时间步骤
 
-    # 绘制热力图
-    if log_scale:
+    # 确定颜色标准化
+    if custom_norm is not None:
+        # 使用自定义标准化
+        norm = custom_norm
+    elif log_scale:
         # 使用对数比例，先将0值替换为1（或最小非零值）以避免log(0)错误
-        min_nonzero = np.min(heatmap_data[heatmap_data > 0]) if np.any(heatmap_data > 0) else 1
+        min_nonzero = np.min(heatmap_data[heatmap_data > 0]) if np.any(heatmap_data > 0) else -1
         log_data = np.copy(heatmap_data)
         log_data[log_data == 0] = min_nonzero
-        pcm = ax.pcolormesh(x, y, log_data, norm=LogNorm(), cmap='viridis', shading='auto')
+        
+        # 设置对数标准化的范围
+        log_vmin = vmin if vmin is not None else min_nonzero
+        log_vmax = vmax if vmax is not None else np.max(log_data)
+        norm = LogNorm(vmin=log_vmin, vmax=log_vmax)
+        heatmap_data = log_data
     else:
-        pcm = ax.pcolormesh(x, y, heatmap_data, cmap='viridis', shading='auto')
+        # 使用线性比例
+        linear_vmin = vmin if vmin is not None else np.min(heatmap_data)
+        linear_vmax = vmax if vmax is not None else np.max(heatmap_data)
+        norm = plt.Normalize(vmin=linear_vmin, vmax=linear_vmax)
+
+    # 绘制热力图
+    pcm = ax.pcolormesh(x, y, heatmap_data, norm=norm, cmap=cmap, shading='auto')
 
     # 添加颜色条
     cbar = fig.colorbar(pcm, ax=ax, label='Agent Count')
+    
+    # 如果设置了具体的数值范围，可以自定义颜色条刻度
+    if vmin is not None and vmax is not None:
+        if log_scale and not custom_norm:
+            # 对数尺度的刻度
+            cbar.set_ticks([vmin, vmin*10, vmin*100, vmax])
+        else:
+            # 线性尺度的刻度
+            step = (vmax - vmin) / 5
+            cbar.set_ticks([vmin + i*step for i in range(6)])
 
     # 设置标签和标题
     ax.set_xlabel('Opinion Value')
@@ -93,7 +122,7 @@ def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_sca
     selected_data = heatmap_data[selected_timesteps]
 
     # 绘制3D表面
-    surf = ax.plot_surface(X, Y, selected_data, cmap='viridis', edgecolor='none', alpha=0.8)
+    surf = ax.plot_surface(X, Y, selected_data, cmap=cmap, edgecolor='none', alpha=0.8)
 
     # 设置标签和标题
     ax.set_xlabel('Opinion Value')

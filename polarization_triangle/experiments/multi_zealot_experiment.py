@@ -189,7 +189,7 @@ def average_stats(stats_list):
     return avg_stats
 
 
-def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir):
+def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir, heatmap_config=None):
     """
     生成平均意见分布热图
     
@@ -197,12 +197,27 @@ def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir):
     all_opinion_histories -- 包含所有运行的意见历史的字典
     mode_names -- 模式名称列表
     output_dir -- 输出目录
+    heatmap_config -- 热力图配置字典，包含颜色映射、尺度等参数
     """
     print("Generating average heatmaps...")
     
     # 确保输出目录存在
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    
+    # 设置默认的热力图配置
+    default_config = {
+        'bins': 160,
+        'log_scale': False,
+        'cmap': 'viridis',
+        'vmin': None,
+        'vmax': None,
+        'custom_norm': None
+    }
+    
+    # 合并用户提供的配置
+    if heatmap_config:
+        default_config.update(heatmap_config)
     
     for mode in mode_names:
         # 获取该模式的所有意见历史
@@ -211,54 +226,196 @@ def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir):
         if not mode_histories:
             continue
         
-        # 计算平均意见历史
-        avg_history = calculate_average_opinion_history(mode_histories)
+        # 计算平均意见分布（而不是平均意见轨迹）
+        avg_distribution = calculate_average_opinion_distribution(mode_histories, bins=default_config['bins'])
+
+        # start_step = 900
+        start_step = 0
+        avg_distribution = avg_distribution[start_step:]
         
         # 绘制平均热图
         heatmap_file = os.path.join(output_dir, f"avg_{mode.lower().replace(' ', '_')}_heatmap.png")
-        draw_opinion_distribution_heatmap(
-            avg_history,
-            f"Average Opinion Evolution {mode} (Multiple Runs)",
+        draw_opinion_distribution_heatmap_from_distribution(
+            avg_distribution,
+            f"Average Opinion Distribution Evolution {mode} (Multiple Runs)",
             heatmap_file,
-            bins=40,
-            log_scale=True
+            bins=default_config['bins'],
+            log_scale=default_config['log_scale'],
+            cmap=default_config['cmap'],
+            vmin=default_config['vmin'],
+            vmax=default_config['vmax'],
+            custom_norm=default_config['custom_norm'],
+            start_step=start_step
         )
 
 
-def calculate_average_opinion_history(opinion_histories):
+def calculate_average_opinion_distribution(opinion_histories, bins=40):
     """
-    计算多次运行的平均意见历史
+    计算多次运行的平均意见分布直方图
     
     参数:
     opinion_histories -- 包含多次运行意见历史的列表
+    bins -- opinion值的分箱数量
     
     返回:
-    list -- 平均意见历史
+    numpy.ndarray -- 平均分布直方图数据，形状为(time_steps, bins)
     """
     if not opinion_histories:
-        return []
+        return np.array([])
     
-    # 获取第一个历史的时间步长和智能体数量
+    # 获取第一个历史的时间步长
     num_steps = len(opinion_histories[0])
-    num_agents = len(opinion_histories[0][0])
     
-    # 初始化平均意见历史
-    avg_history = []
+    # 创建opinion的bins
+    opinion_bins = np.linspace(-1, 1, bins + 1)
     
-    # 对每个时间步骤计算平均值
-    for step in range(num_steps):
-        # 收集所有运行在该时间步的意见
-        step_opinions = np.zeros((len(opinion_histories), num_agents))
+    # 初始化所有运行的分布数据存储
+    all_distributions = np.zeros((len(opinion_histories), num_steps, bins))
+    
+    # 对每次运行计算分布直方图
+    for run_idx, history in enumerate(opinion_histories):
+        for step in range(min(num_steps, len(history))):
+            # 计算该时间步的opinion分布
+            hist, _ = np.histogram(history[step], bins=opinion_bins, range=(-1, 1))
+            all_distributions[run_idx, step] = hist
+    
+    # 计算平均分布
+    avg_distribution = np.mean(all_distributions, axis=0)
+    
+    return avg_distribution
+
+
+def draw_opinion_distribution_heatmap_from_distribution(distribution_data, title, filename, bins=40, log_scale=True,
+                                                       cmap='viridis', vmin=None, vmax=None, custom_norm=None, start_step=0):
+    """
+    从预计算的分布数据绘制热力图
+    
+    参数:
+    distribution_data -- 分布数据，形状为(time_steps, bins)
+    title -- 图表标题
+    filename -- 保存文件名
+    bins -- opinion值的分箱数量
+    log_scale -- 是否使用对数比例表示颜色
+    cmap -- 颜色映射方案 ('viridis', 'plasma', 'inferno', 'magma', 'coolwarm', 'RdBu', 'hot', 'jet', etc.)
+    vmin -- 颜色尺度的最小值，如果为None则自动确定
+    vmax -- 颜色尺度的最大值，如果为None则自动确定
+    custom_norm -- 自定义的颜色标准化对象，如果提供则会覆盖log_scale、vmin、vmax
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    
+    # 获取时间步数
+    time_steps = distribution_data.shape[0]
+    
+    # 创建opinion的bins
+    opinion_bins = np.linspace(-1, 1, bins + 1)
+    
+    # 创建绘图
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # 创建坐标
+    x = opinion_bins[:-1] + np.diff(opinion_bins) / 2  # opinion值（bin中点）
+    y = np.arange(time_steps)  # 时间步骤索引（用于绘图，从0开始）
+    
+    # 确定颜色标准化
+    if custom_norm is not None:
+        # 使用自定义标准化
+        norm = custom_norm
+        plot_data = distribution_data
+    elif log_scale:
+        # 使用对数比例，先将0值替换为最小非零值以避免log(0)错误
+        min_nonzero = np.min(distribution_data[distribution_data > 0]) if np.any(distribution_data > 0) else 1
+        log_data = np.copy(distribution_data)
+        log_data[log_data == 0] = min_nonzero
         
-        for run_idx, history in enumerate(opinion_histories):
-            if step < len(history):  # 确保该运行有足够的步骤
-                step_opinions[run_idx] = history[step]
-        
-        # 计算平均意见
-        avg_step_opinions = np.mean(step_opinions, axis=0)
-        avg_history.append(avg_step_opinions)
+        # 设置对数标准化的范围
+        log_vmin = vmin if vmin is not None else min_nonzero
+        log_vmax = vmax if vmax is not None else np.max(log_data)
+        norm = LogNorm(vmin=log_vmin, vmax=log_vmax)
+        plot_data = log_data
+    else:
+        # 使用线性比例
+        linear_vmin = vmin if vmin is not None else np.min(distribution_data)
+        linear_vmax = vmax if vmax is not None else np.max(distribution_data)
+        norm = plt.Normalize(vmin=linear_vmin, vmax=linear_vmax)
+        plot_data = distribution_data
     
-    return avg_history
+    # 绘制热力图
+    pcm = ax.pcolormesh(x, y, plot_data, norm=norm, cmap=cmap, shading='auto')
+    
+    # 添加颜色条
+    cbar = fig.colorbar(pcm, ax=ax, label='Average Agent Count')
+    
+    # 如果设置了具体的数值范围，可以自定义颜色条刻度
+    if vmin is not None and vmax is not None:
+        if log_scale and not custom_norm:
+            # 对数尺度的刻度
+            ticks = []
+            current = vmin
+            while current <= vmax:
+                ticks.append(current)
+                current *= 10
+            if ticks[-1] < vmax:
+                ticks.append(vmax)
+            cbar.set_ticks(ticks)
+        else:
+            # 线性尺度的刻度
+            step = (vmax - vmin) / 5
+            cbar.set_ticks([vmin + i*step for i in range(6)])
+    
+    # 设置标签和标题
+    ax.set_xlabel('Opinion Value')
+    ax.set_ylabel('Time Step')
+    ax.set_title(title)
+    
+    # 优化Y轴刻度，防止过密，但显示真实的时间步骤
+    max_ticks = 10
+    tick_step = max(1, time_steps // max_ticks)
+    tick_positions = np.arange(0, time_steps, tick_step)  # 在图上的位置（从0开始）
+    tick_labels = [str(start_step + pos) for pos in tick_positions]  # 显示的真实时间步骤
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_labels)
+    
+    # 保存图表
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+    
+    # 额外创建一个3D视图
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # 选择一些时间步骤来展示（避免过度拥挤）
+    step_interval = max(1, time_steps // 20)
+    selected_timesteps = np.arange(0, time_steps, step_interval)
+    
+    # 为3D图准备数据
+    X, Y = np.meshgrid(x, selected_timesteps)
+    selected_data = plot_data[selected_timesteps]
+    
+    # 绘制3D表面
+    surf = ax.plot_surface(X, Y, selected_data, cmap=cmap, edgecolor='none', alpha=0.8)
+    
+    # 设置标签和标题
+    ax.set_xlabel('Opinion Value')
+    ax.set_ylabel('Time Step')
+    ax.set_zlabel('Average Agent Count')
+    ax.set_title(f"{title} - 3D View")
+    
+    # 修复3D图的Y轴刻度显示真实时间步骤
+    y_tick_positions = selected_timesteps[::max(1, len(selected_timesteps)//5)]
+    y_tick_labels = [str(start_step + pos) for pos in y_tick_positions]
+    ax.set_yticks(y_tick_positions)
+    ax.set_yticklabels(y_tick_labels)
+    
+    # 添加颜色条
+    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, label='Average Agent Count')
+    
+    # 保存3D图
+    waterfall_filename = filename.replace('.png', '_3d.png')
+    plt.tight_layout()
+    plt.savefig(waterfall_filename, dpi=300)
+    plt.close()
 
 
 def plot_average_statistics(avg_stats, mode_names, output_dir, steps):

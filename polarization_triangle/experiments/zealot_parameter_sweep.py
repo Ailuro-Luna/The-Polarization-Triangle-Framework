@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
 from polarization_triangle.experiments.multi_zealot_experiment import run_multi_zealot_experiment, average_stats, plot_average_statistics, generate_average_heatmaps
 
+# 生成所有可能的参数组合，并运行实验
 def run_parameter_sweep(
     runs_per_config=10,
     steps=100,
@@ -105,6 +106,7 @@ def run_parameter_sweep(
         
         # 运行多次实验并求均值
         try:
+            # 运行实验
             avg_stats = run_zealot_parameter_experiment(
                 runs=runs_per_config,
                 steps=steps,
@@ -543,7 +545,7 @@ if __name__ == "__main__":
     # 运行参数扫描实验
     run_parameter_sweep(
         runs_per_config=10,  # 每种配置运行10次
-        steps=1000,           # 每次运行1000步
+        steps=300,           # 每次运行1000步
         initial_scale=0.1,   # 初始意见缩放到10%
         base_seed=42         # 基础随机种子
     ) 
