@@ -24,6 +24,7 @@ import time
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Any
 import itertools
+from glob import glob
 
 from polarization_triangle.core.config import SimulationConfig, high_polarization_config
 from polarization_triangle.core.simulation import Simulation
@@ -214,15 +215,204 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
     return results
 
 
-def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, Dict[str, List[List[float]]]], 
-                output_dir: str):
+def save_data_incrementally(plot_type: str, x_values: List[float], 
+                           all_results: Dict[str, Dict[str, List[List[float]]]], 
+                           output_dir: str, batch_info: str = ""):
     """
-    绘制结果图表，生成多种类型的图表到不同子文件夹
+    以追加模式保存数据到CSV文件，支持累积多次运行的结果
     
     Args:
     plot_type: 'zealot_numbers' 或 'morality_ratios'
     x_values: x轴取值
     all_results: 所有组合的结果数据
+    output_dir: 输出目录
+    batch_info: 批次信息，用于标识本次运行
+    """
+    data_dir = os.path.join(output_dir, "accumulated_data")
+    os.makedirs(data_dir, exist_ok=True)
+    
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    if not batch_info:
+        batch_info = timestamp
+    
+    # 为每个参数组合保存数据
+    for combo_label, results in all_results.items():
+        # 准备新的数据行
+        new_data_rows = []
+        
+        for i, x_val in enumerate(x_values):
+            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
+                for run_idx, value in enumerate(results[metric][i]):
+                    new_data_rows.append({
+                        'x_value': x_val,
+                        'metric': metric,
+                        'run': run_idx,
+                        'value': value,
+                        'combination': combo_label,
+                        'batch_id': batch_info,
+                        'timestamp': timestamp
+                    })
+        
+        new_df = pd.DataFrame(new_data_rows)
+        
+        # 生成文件名
+        safe_label = combo_label.replace('/', '_').replace(' ', '_').replace('=', '_').replace(',', '_')
+        filename = f"{plot_type}_{safe_label}_accumulated.csv"
+        filepath = os.path.join(data_dir, filename)
+        
+        # 追加或创建文件
+        if os.path.exists(filepath):
+            # 文件存在，追加数据
+            new_df.to_csv(filepath, mode='a', header=False, index=False)
+            print(f"Appended data to: {filepath}")
+        else:
+            # 文件不存在，创建新文件
+            new_df.to_csv(filepath, index=False)
+            print(f"Created new data file: {filepath}")
+
+
+def load_accumulated_data(output_dir: str) -> Dict[str, pd.DataFrame]:
+    """
+    读取累积的数据文件
+    
+    Args:
+    output_dir: 输出目录
+    
+    Returns:
+    dict: 文件名对应的DataFrame字典
+    """
+    data_dir = os.path.join(output_dir, "accumulated_data")
+    if not os.path.exists(data_dir):
+        print(f"Data directory not found: {data_dir}")
+        return {}
+    
+    # 查找所有累积数据文件
+    pattern = os.path.join(data_dir, "*_accumulated.csv")
+    files = glob(pattern)
+    
+    if not files:
+        print(f"No accumulated data files found in: {data_dir}")
+        return {}
+    
+    loaded_data = {}
+    
+    print("📂 Loading accumulated data files:")
+    for filepath in files:
+        filename = os.path.basename(filepath)
+        try:
+            df = pd.read_csv(filepath)
+            loaded_data[filename] = df
+            
+            # 计算总运行次数（与process_accumulated_data_for_plotting中的计算保持一致）
+            total_data_points = len(df)
+            unique_x_values = len(df['x_value'].unique()) if not df.empty else 0
+            unique_metrics = len(df['metric'].unique()) if not df.empty else 0
+            
+            # 计算总运行次数：总数据点 / (x值数量 * 指标数量)
+            total_runs = total_data_points // (unique_x_values * unique_metrics) if unique_x_values > 0 and unique_metrics > 0 else 0
+            
+            # 统计批次数（用于参考）
+            total_batches = len(df['batch_id'].unique()) if 'batch_id' in df.columns and not df.empty else 0
+            
+            print(f"  ✅ {filename}: {len(df)} records, {total_runs} total runs ({total_batches} batches)")
+        except Exception as e:
+            print(f"  ❌ Failed to load {filename}: {e}")
+    
+    return loaded_data
+
+
+def process_accumulated_data_for_plotting(loaded_data: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, Dict[str, List[List[float]]]], List[float], Dict[str, int]]:
+    """
+    将累积数据处理成绘图所需的格式
+    
+    Args:
+    loaded_data: 已加载的数据字典
+    
+    Returns:
+    tuple: (all_results, x_values, total_runs_per_combination)
+    """
+    if not loaded_data:
+        return {}, [], {}
+    
+    # 确定plot_type（从文件名推断）
+    first_filename = list(loaded_data.keys())[0]
+    if first_filename.startswith('zealot_numbers'):
+        plot_type = 'zealot_numbers'
+    elif first_filename.startswith('morality_ratios'):
+        plot_type = 'morality_ratios'
+    else:
+        print("Warning: Cannot determine plot type from filename")
+        plot_type = 'unknown'
+    
+    all_results = {}
+    x_values_set = set()
+    total_runs_per_combination = {}
+    
+    for filename, df in loaded_data.items():
+        if df.empty:
+            continue
+            
+        # 提取组合标签（从文件名）
+        if plot_type == 'zealot_numbers':
+            combo_label = filename.replace('zealot_numbers_', '').replace('_accumulated.csv', '').replace('_', ' ')
+        elif plot_type == 'morality_ratios':
+            combo_label = filename.replace('morality_ratios_', '').replace('_accumulated.csv', '').replace('_', ' ')
+        else:
+            combo_label = filename.replace('_accumulated.csv', '')
+        
+        # 恢复原始标签格式
+        combo_label = combo_label.replace('Clustered', 'Clustered').replace('Random', 'Random')
+        
+        # 统计总运行次数（计算实际的数据点数量，而不是batch数）
+        total_data_points = len(df)
+        unique_x_values = len(df['x_value'].unique())
+        unique_metrics = len(df['metric'].unique())
+        
+        # 计算总运行次数：总数据点 / (x值数量 * 指标数量)
+        total_runs = total_data_points // (unique_x_values * unique_metrics) if unique_x_values > 0 and unique_metrics > 0 else 0
+        
+        total_runs_per_combination[combo_label] = total_runs
+        
+        # 收集所有x值
+        x_values_set.update(df['x_value'].unique())
+        
+        # 按组合处理数据
+        combo_results = {
+            'mean_opinion': [],
+            'variance': [],
+            'variance_per_identity': [],
+            'polarization_index': []
+        }
+        
+        # 获取所有x值并排序
+        combo_x_values = sorted(df['x_value'].unique())
+        
+        for x_val in combo_x_values:
+            x_data = df[df['x_value'] == x_val]
+            
+            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
+                metric_data = x_data[x_data['metric'] == metric]['value'].tolist()
+                combo_results[metric].append(metric_data)
+        
+        all_results[combo_label] = combo_results
+    
+    x_values = sorted(list(x_values_set))
+    
+    return all_results, x_values, total_runs_per_combination
+
+
+def plot_accumulated_results(plot_type: str, x_values: List[float], 
+                           all_results: Dict[str, Dict[str, List[List[float]]]], 
+                           total_runs_per_combination: Dict[str, int],
+                           output_dir: str):
+    """
+    绘制累积数据的结果图表，文件名中包含总运行次数信息
+    
+    Args:
+    plot_type: 'zealot_numbers' 或 'morality_ratios'
+    x_values: x轴取值
+    all_results: 所有组合的结果数据
+    total_runs_per_combination: 每个组合的总运行次数
     output_dir: 输出目录
     """
     metrics = ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']
@@ -234,6 +424,15 @@ def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, D
     }
     
     x_label = 'Number of Zealots' if plot_type == 'zealot_numbers' else 'Morality Ratio (%)'
+    
+    # 计算总运行次数范围（用于文件名）
+    min_runs = min(total_runs_per_combination.values()) if total_runs_per_combination else 0
+    max_runs = max(total_runs_per_combination.values()) if total_runs_per_combination else 0
+    
+    if min_runs == max_runs:
+        runs_suffix = f"_{min_runs}runs"
+    else:
+        runs_suffix = f"_{min_runs}-{max_runs}runs"
     
     # 创建子文件夹
     plot_folders = {
@@ -282,20 +481,25 @@ def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, D
                 'y': all_points_y
             }
         
-        # 1. 带误差条的图（现有类型）
+        # 为每种图添加运行次数信息到标题（显示总run数）
+        title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
+        
+        # 1. 带误差条的图
         plt.figure(figsize=(12, 8))
         for combo_label, data in processed_data.items():
+            runs_info = total_runs_per_combination.get(combo_label, 0)
+            label_with_runs = f"{combo_label} (n={runs_info})"
             plt.errorbar(x_values, data['means'], yerr=data['stds'], 
-                        label=combo_label, marker='o', linewidth=2, capsize=3, alpha=0.8)
+                        label=label_with_runs, marker='o', linewidth=2, capsize=3, alpha=0.8)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (With Error Bars)', fontsize=14, fontweight='bold')
+        plt.title(f'{metric_labels[metric]} vs {x_label} (With Error Bars){title_suffix}', fontsize=14, fontweight='bold')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        filename = f"{plot_type}_{metric}.png"
+        filename = f"{plot_type}_{metric}{runs_suffix}.png"
         filepath = os.path.join(plot_folders['error_bar'], filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -305,125 +509,94 @@ def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, D
         colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
         
         for i, (combo_label, data) in enumerate(scatter_data.items()):
-            plt.scatter(data['x'], data['y'], label=combo_label, alpha=0.6, 
+            runs_info = total_runs_per_combination.get(combo_label, 0)
+            label_with_runs = f"{combo_label} (n={runs_info})"
+            plt.scatter(data['x'], data['y'], label=label_with_runs, alpha=0.6, 
                        color=colors[i], s=30)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data Points)', fontsize=14, fontweight='bold')
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data Points){title_suffix}', fontsize=14, fontweight='bold')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        filename = f"{plot_type}_{metric}_scatter.png"
+        filename = f"{plot_type}_{metric}_scatter{runs_suffix}.png"
         filepath = os.path.join(plot_folders['scatter'], filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
         
-        # 3. 均值曲线图（无误差条）
+        # 3. 均值曲线图
         plt.figure(figsize=(12, 8))
         for combo_label, data in processed_data.items():
-            plt.plot(x_values, data['means'], label=combo_label, marker='o', 
+            runs_info = total_runs_per_combination.get(combo_label, 0)
+            label_with_runs = f"{combo_label} (n={runs_info})"
+            plt.plot(x_values, data['means'], label=label_with_runs, marker='o', 
                     linewidth=2, markersize=6, alpha=0.8)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Mean Values Only)', fontsize=14, fontweight='bold')
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Mean Values Only){title_suffix}', fontsize=14, fontweight='bold')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        filename = f"{plot_type}_{metric}_mean.png"
+        filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
         filepath = os.path.join(plot_folders['mean'], filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
         
-        # 4. 组合图（散点 + 均值曲线）
+        # 4. 组合图
         plt.figure(figsize=(12, 8))
         colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
         
         for i, (combo_label, scatter_pts) in enumerate(scatter_data.items()):
             color = colors[i]
+            runs_info = total_runs_per_combination.get(combo_label, 0)
             
             # 绘制散点（较淡的颜色）
             plt.scatter(scatter_pts['x'], scatter_pts['y'], alpha=0.4, 
-                       color=color, s=20, label=f'{combo_label} (raw data)')
+                       color=color, s=20, label=f'{combo_label} (raw, n={runs_info})')
             
             # 绘制均值曲线（较深的颜色）
             mean_data = processed_data[combo_label]
             plt.plot(x_values, mean_data['means'], color=color, 
                     marker='o', linewidth=3, markersize=8, alpha=0.9,
-                    label=f'{combo_label} (mean)')
+                    label=f'{combo_label} (mean, n={runs_info})')
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data + Mean)', fontsize=14, fontweight='bold')
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data + Mean){title_suffix}', fontsize=14, fontweight='bold')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        filename = f"{plot_type}_{metric}_combined.png"
+        filename = f"{plot_type}_{metric}_combined{runs_suffix}.png"
         filepath = os.path.join(plot_folders['combined'], filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
     
-    print(f"  ✅ Generated 4 types of plots for {plot_type}:")
+    print(f"  ✅ Generated 4 types of plots for {plot_type} with run count info:")
     print(f"     - Error bar plots: {plot_folders['error_bar']}")
     print(f"     - Scatter plots: {plot_folders['scatter']}")
     print(f"     - Mean line plots: {plot_folders['mean']}")
     print(f"     - Combined plots: {plot_folders['combined']}")
 
 
-def save_raw_data(plot_type: str, x_values: List[float], 
-                 all_results: Dict[str, Dict[str, List[List[float]]]], 
-                 output_dir: str):
+def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis", 
+                           num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30,
+                           batch_name: str = ""):
     """
-    保存原始数据到CSV文件
-    
-    Args:
-    plot_type: 'zealot_numbers' 或 'morality_ratios'
-    x_values: x轴取值
-    all_results: 所有组合的结果数据
-    output_dir: 输出目录
-    """
-    # 为每个参数组合保存数据
-    for combo_label, results in all_results.items():
-        # 创建数据框
-        data_rows = []
-        
-        for i, x_val in enumerate(x_values):
-            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
-                for run_idx, value in enumerate(results[metric][i]):
-                    data_rows.append({
-                        'x_value': x_val,
-                        'metric': metric,
-                        'run': run_idx,
-                        'value': value,
-                        'combination': combo_label
-                    })
-        
-        df = pd.DataFrame(data_rows)
-        
-        # 保存到CSV
-        safe_label = combo_label.replace('/', '_').replace(' ', '_').replace('=', '_').replace(',', '_')
-        filename = f"{plot_type}_{safe_label}_raw_data.csv"
-        filepath = os.path.join(output_dir, filename)
-        df.to_csv(filepath, index=False)
-        print(f"Saved raw data: {filepath}")
-
-
-def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_analysis", 
-                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30):
-    """
-    运行zealot和morality分析实验
+    运行测试并以追加模式保存数据（第一部分）
     
     Args:
     output_dir: 输出目录
-    num_runs: 每个参数点的运行次数
+    num_runs: 本次运行的次数
     max_zealots: 最大zealot数量
     max_morality: 最大morality ratio (%)
+    batch_name: 批次名称，用于标识本次运行
     """
-    print("🔬 Starting Zealot and Morality Analysis Experiment")
+    print("🔬 Running Tests and Accumulating Data")
     print("=" * 70)
     
     start_time = time.time()
@@ -434,15 +607,19 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     # 获取参数组合
     combinations = create_config_combinations()
     
-    print(f"📊 Experiment Configuration:")
-    print(f"   Number of runs per parameter point: {num_runs}")
+    if not batch_name:
+        batch_name = time.strftime("%Y%m%d_%H%M%S")
+    
+    print(f"📊 Batch Configuration:")
+    print(f"   Batch name: {batch_name}")
+    print(f"   Number of runs this batch: {num_runs}")
     print(f"   Max zealots: {max_zealots}")
     print(f"   Max morality ratio: {max_morality}%")
     print(f"   Output directory: {output_dir}")
     print()
     
-    # === 图1：x轴为zealot numbers ===
-    print("📈 Generating Plot Type 1: Zealot Numbers Analysis")
+    # === 处理图1：x轴为zealot numbers ===
+    print("📈 Running Test Type 1: Zealot Numbers Analysis")
     print("-" * 50)
     
     plot1_start_time = time.time()
@@ -455,20 +632,19 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
         results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs)
         zealot_results[combo['label']] = results
     
-    # 绘制zealot numbers的图
-    plot_results('zealot_numbers', zealot_x_values, zealot_results, output_dir)
-    save_raw_data('zealot_numbers', zealot_x_values, zealot_results, output_dir)
+    # 保存zealot numbers的数据
+    save_data_incrementally('zealot_numbers', zealot_x_values, zealot_results, output_dir, batch_name)
     
     plot1_end_time = time.time()
     plot1_duration = plot1_end_time - plot1_start_time
     hours1, remainder1 = divmod(plot1_duration, 3600)
     minutes1, seconds1 = divmod(remainder1, 60)
     
-    print(f"⏱️  Plot Type 1 completed in: {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
+    print(f"⏱️  Test Type 1 completed in: {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
     print()
     
-    # === 图2：x轴为morality ratio ===
-    print("📈 Generating Plot Type 2: Morality Ratio Analysis")
+    # === 处理图2：x轴为morality ratio ===
+    print("📈 Running Test Type 2: Morality Ratio Analysis")
     print("-" * 50)
     
     plot2_start_time = time.time()
@@ -481,16 +657,15 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
         results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
         morality_results[combo['label']] = results
     
-    # 绘制morality ratio的图
-    plot_results('morality_ratios', morality_x_values, morality_results, output_dir)
-    save_raw_data('morality_ratios', morality_x_values, morality_results, output_dir)
+    # 保存morality ratio的数据
+    save_data_incrementally('morality_ratios', morality_x_values, morality_results, output_dir, batch_name)
     
     plot2_end_time = time.time()
     plot2_duration = plot2_end_time - plot2_start_time
     hours2, remainder2 = divmod(plot2_duration, 3600)
     minutes2, seconds2 = divmod(remainder2, 60)
     
-    print(f"⏱️  Plot Type 2 completed in: {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
+    print(f"⏱️  Test Type 2 completed in: {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
     print()
     
     # 计算总耗时
@@ -500,72 +675,150 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     minutes, seconds = divmod(remainder, 60)
     
     print("\n" + "=" * 70)
-    print("🎉 Experiment Completed Successfully!")
-    print(f"📊 Generated 32 plots (2 types × 4 metrics × 4 plot styles)")
-    print(f"📁 Plot types: Error bars, Scatter points, Mean lines, Combined")
+    print("🎉 Data Collection Completed Successfully!")
+    print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
     print()
     print("⏱️  Timing Summary:")
-    print(f"   Plot Type 1 (Zealot Numbers): {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
-    print(f"   Plot Type 2 (Morality Ratios): {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
+    print(f"   Test Type 1 (Zealot Numbers): {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
+    print(f"   Test Type 2 (Morality Ratios): {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
     print(f"   Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
-    print(f"📁 Results saved to: {output_dir}")
+    print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
     
-    # 保存实验信息（包含详细的耗时统计）
-    info_file = os.path.join(output_dir, "experiment_info.txt")
-    with open(info_file, "w") as f:
-        f.write("Zealot and Morality Analysis Experiment\n")
-        f.write("=" * 50 + "\n\n")
-        
-        f.write("Timing Summary:\n")
-        f.write(f"Plot Type 1 (Zealot Numbers): {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s\n")
-        f.write(f"Plot Type 2 (Morality Ratios): {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s\n")
-        f.write(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n\n")
-        
-        f.write("Configuration:\n")
-        f.write(f"Number of runs per parameter point: {num_runs}\n")
+    # 保存批次信息
+    batch_info_file = os.path.join(output_dir, "accumulated_data", f"batch_info_{batch_name}.txt")
+    with open(batch_info_file, "w") as f:
+        f.write(f"Batch Information\n")
+        f.write(f"================\n\n")
+        f.write(f"Batch name: {batch_name}\n")
+        f.write(f"Number of runs: {num_runs}\n")
         f.write(f"Max zealots: {max_zealots}\n")
-        f.write(f"Max morality ratio: {max_morality}%\n\n")
-        
-        f.write("Plot Type 1 - Zealot Numbers Analysis:\n")
-        for combo in combinations['zealot_numbers']:
-            f.write(f"  - {combo['label']}\n")
-        
-        f.write("\nPlot Type 2 - Morality Ratio Analysis:\n")
-        for combo in combinations['morality_ratios']:
-            f.write(f"  - {combo['label']}\n")
-        
-        f.write(f"\nGenerated plots (32 total: 2 types × 4 metrics × 4 styles):\n")
-        f.write(f"Plot styles: error_bar, scatter, mean, combined\n\n")
-        
-        plot_folders = ['error_bar_plots', 'scatter_plots', 'mean_plots', 'combined_plots']
-        for folder in plot_folders:
-            f.write(f"{folder}/:\n")
-            for plot_type in ['zealot_numbers', 'morality_ratios']:
-                for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
-                    if folder == 'error_bar_plots':
-                        filename = f"{plot_type}_{metric}.png"
-                    elif folder == 'scatter_plots':
-                        filename = f"{plot_type}_{metric}_scatter.png"
-                    elif folder == 'mean_plots':
-                        filename = f"{plot_type}_{metric}_mean.png"
-                    else:  # combined_plots
-                        filename = f"{plot_type}_{metric}_combined.png"
-                    f.write(f"  - {filename}\n")
-            f.write("\n")
-        
-        # 添加性能统计
-        f.write(f"Performance Statistics:\n")
-        f.write(f"Average time per zealot combination: {plot1_duration/len(combinations['zealot_numbers']):.2f}s\n")
-        f.write(f"Average time per morality combination: {plot2_duration/len(combinations['morality_ratios']):.2f}s\n")
-        f.write(f"Total parameter points processed: {len(zealot_x_values) * len(combinations['zealot_numbers']) + len(morality_x_values) * len(combinations['morality_ratios'])}\n")
-        f.write(f"Average time per parameter point: {elapsed_time/(len(zealot_x_values) * len(combinations['zealot_numbers']) + len(morality_x_values) * len(combinations['morality_ratios'])):.2f}s\n")
+        f.write(f"Max morality ratio: {max_morality}%\n")
+        f.write(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
+        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+
+def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis"):
+    """
+    从累积数据文件中读取数据并生成图表（第二部分）
+    
+    Args:
+    output_dir: 输出目录（包含accumulated_data子文件夹）
+    """
+    print("📊 Generating Plots from Accumulated Data")
+    print("=" * 70)
+    
+    start_time = time.time()
+    
+    # 加载累积数据
+    loaded_data = load_accumulated_data(output_dir)
+    if not loaded_data:
+        print("❌ No accumulated data found. Please run data collection first.")
+        return
+    
+    # 按图类型分组数据文件
+    zealot_files = {k: v for k, v in loaded_data.items() if k.startswith('zealot_numbers')}
+    morality_files = {k: v for k, v in loaded_data.items() if k.startswith('morality_ratios')}
+    
+    # 处理zealot numbers数据并绘图
+    if zealot_files:
+        print("\n📈 Processing Zealot Numbers Data...")
+        zealot_results, zealot_x_values, zealot_runs_info = process_accumulated_data_for_plotting(zealot_files)
+        if zealot_results:
+            plot_accumulated_results('zealot_numbers', zealot_x_values, zealot_results, zealot_runs_info, output_dir)
+    
+    # 处理morality ratios数据并绘图
+    if morality_files:
+        print("\n📈 Processing Morality Ratios Data...")
+        morality_results, morality_x_values, morality_runs_info = process_accumulated_data_for_plotting(morality_files)
+        if morality_results:
+            plot_accumulated_results('morality_ratios', morality_x_values, morality_results, morality_runs_info, output_dir)
+    
+    # 计算总耗时
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    hours, remainder = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    print("\n" + "=" * 70)
+    print("🎉 Plot Generation Completed Successfully!")
+    print(f"📊 Generated plots from accumulated data")
+    print(f"⏱️  Total plotting time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    print(f"📁 Plots saved to: {output_dir}")
+
+
+def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_analysis", 
+                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30):
+    """
+    运行完整的zealot和morality分析实验（保持向后兼容）
+    
+    Args:
+    output_dir: 输出目录
+    num_runs: 每个参数点的运行次数
+    max_zealots: 最大zealot数量
+    max_morality: 最大morality ratio (%)
+    """
+    print("🔬 Starting Complete Zealot and Morality Analysis Experiment")
+    print("=" * 70)
+    
+    # 第一步：运行测试并累积数据
+    run_and_accumulate_data(output_dir, num_runs, max_zealots, max_morality)
+    
+    # 第二步：从累积数据生成图表
+    plot_from_accumulated_data(output_dir)
 
 
 if __name__ == "__main__":
-    # 运行实验
-    run_zealot_morality_analysis(
+    # 新的分离式使用方法：
+    
+    # 开始计时
+    main_start_time = time.time()
+    
+    # 方法1：分两步运行
+    # 第一步：运行测试并积累数据（可以多次运行以积累更多数据）
+    print("=" * 50)
+    print("🚀 示例：分步骤运行实验")
+    print("=" * 50)
+    
+    # 数据收集阶段
+    data_collection_start_time = time.time()
+    
+    # 可以多次运行以下命令来积累数据：
+    run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=10,  # 可以调整运行次数以平衡速度和精度
-        max_zealots=50,  # 可以调整最大zealot数量
-        max_morality=100  # 可以调整最大morality ratio
-    ) 
+        num_runs=5,  # 每次运行5轮测试
+        max_zealots=50,  
+        max_morality=100,
+        batch_name="batch_001"  # 可选：给批次命名
+    )
+    
+    data_collection_end_time = time.time()
+    data_collection_duration = data_collection_end_time - data_collection_start_time
+    
+
+    # 第二步：绘图阶段
+
+    plotting_start_time = time.time()
+
+    plot_from_accumulated_data("results/zealot_morality_analysis")
+    
+    plotting_end_time = time.time()
+    plotting_duration = plotting_end_time - plotting_start_time
+    
+    # 计算总耗时
+    main_end_time = time.time()
+    total_duration = main_end_time - main_start_time
+    
+    # 格式化耗时显示
+    def format_duration(duration):
+        hours, remainder = divmod(duration, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+    
+    # 显示耗时总结
+    print("\n" + "🕒" * 50)
+    print("⏱️  完整实验耗时总结")
+    print("🕒" * 50)
+    print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
+    print(f"📈 图表生成阶段耗时: {format_duration(plotting_duration)}")
+    print(f"🎯 总耗时: {format_duration(total_duration)}")
+    print("🕒" * 50) 
