@@ -217,7 +217,7 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
 def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, Dict[str, List[List[float]]]], 
                 output_dir: str):
     """
-    绘制结果图表
+    绘制结果图表，生成多种类型的图表到不同子文件夹
     
     Args:
     plot_type: 'zealot_numbers' 或 'morality_ratios'
@@ -235,48 +235,143 @@ def plot_results(plot_type: str, x_values: List[float], all_results: Dict[str, D
     
     x_label = 'Number of Zealots' if plot_type == 'zealot_numbers' else 'Morality Ratio (%)'
     
-    # 为每个指标创建一个图
+    # 创建子文件夹
+    plot_folders = {
+        'error_bar': os.path.join(output_dir, 'error_bar_plots'),
+        'scatter': os.path.join(output_dir, 'scatter_plots'),
+        'mean': os.path.join(output_dir, 'mean_plots'),
+        'combined': os.path.join(output_dir, 'combined_plots')
+    }
+    
+    for folder in plot_folders.values():
+        os.makedirs(folder, exist_ok=True)
+    
+    # 为每个指标创建多种类型的图
     for metric in metrics:
-        plt.figure(figsize=(12, 8))
+        print(f"  Generating plots for {metric_labels[metric]}...")
         
-        # 为每个参数组合绘制曲线
+        # 预处理数据：计算均值、标准差，并准备散点数据
+        processed_data = {}
+        scatter_data = {}
+        
         for combo_label, results in all_results.items():
-            metric_data = results[metric]  # List[List[float]], 每个内层list是一个x值的多次运行结果
-            
+            metric_data = results[metric]
             means = []
             stds = []
+            all_points_x = []
+            all_points_y = []
             
-            for x_runs in metric_data:
-                # 计算均值和标准差，忽略NaN值
+            for i, x_runs in enumerate(metric_data):
                 valid_runs = [val for val in x_runs if not np.isnan(val)]
                 if valid_runs:
                     means.append(np.mean(valid_runs))
                     stds.append(np.std(valid_runs))
+                    # 为散点图收集所有数据点
+                    all_points_x.extend([x_values[i]] * len(valid_runs))
+                    all_points_y.extend(valid_runs)
                 else:
                     means.append(np.nan)
                     stds.append(np.nan)
             
-            means = np.array(means)
-            stds = np.array(stds)
-            
-            # 绘制带误差条的曲线
-            plt.errorbar(x_values, means, yerr=stds, label=combo_label, 
-                        marker='o', linewidth=2, capsize=3, alpha=0.8)
+            processed_data[combo_label] = {
+                'means': np.array(means),
+                'stds': np.array(stds)
+            }
+            scatter_data[combo_label] = {
+                'x': all_points_x,
+                'y': all_points_y
+            }
+        
+        # 1. 带误差条的图（现有类型）
+        plt.figure(figsize=(12, 8))
+        for combo_label, data in processed_data.items():
+            plt.errorbar(x_values, data['means'], yerr=data['stds'], 
+                        label=combo_label, marker='o', linewidth=2, capsize=3, alpha=0.8)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label}', fontsize=14, fontweight='bold')
+        plt.title(f'{metric_labels[metric]} vs {x_label} (With Error Bars)', fontsize=14, fontweight='bold')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        # 保存图表
         filename = f"{plot_type}_{metric}.png"
-        filepath = os.path.join(output_dir, filename)
+        filepath = os.path.join(plot_folders['error_bar'], filename)
         plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
         
-        print(f"Saved plot: {filepath}")
+        # 2. 散点图
+        plt.figure(figsize=(12, 8))
+        colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
+        
+        for i, (combo_label, data) in enumerate(scatter_data.items()):
+            plt.scatter(data['x'], data['y'], label=combo_label, alpha=0.6, 
+                       color=colors[i], s=30)
+        
+        plt.xlabel(x_label, fontsize=12)
+        plt.ylabel(metric_labels[metric], fontsize=12)
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data Points)', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        filename = f"{plot_type}_{metric}_scatter.png"
+        filepath = os.path.join(plot_folders['scatter'], filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # 3. 均值曲线图（无误差条）
+        plt.figure(figsize=(12, 8))
+        for combo_label, data in processed_data.items():
+            plt.plot(x_values, data['means'], label=combo_label, marker='o', 
+                    linewidth=2, markersize=6, alpha=0.8)
+        
+        plt.xlabel(x_label, fontsize=12)
+        plt.ylabel(metric_labels[metric], fontsize=12)
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Mean Values Only)', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        filename = f"{plot_type}_{metric}_mean.png"
+        filepath = os.path.join(plot_folders['mean'], filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # 4. 组合图（散点 + 均值曲线）
+        plt.figure(figsize=(12, 8))
+        colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
+        
+        for i, (combo_label, scatter_pts) in enumerate(scatter_data.items()):
+            color = colors[i]
+            
+            # 绘制散点（较淡的颜色）
+            plt.scatter(scatter_pts['x'], scatter_pts['y'], alpha=0.4, 
+                       color=color, s=20, label=f'{combo_label} (raw data)')
+            
+            # 绘制均值曲线（较深的颜色）
+            mean_data = processed_data[combo_label]
+            plt.plot(x_values, mean_data['means'], color=color, 
+                    marker='o', linewidth=3, markersize=8, alpha=0.9,
+                    label=f'{combo_label} (mean)')
+        
+        plt.xlabel(x_label, fontsize=12)
+        plt.ylabel(metric_labels[metric], fontsize=12)
+        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data + Mean)', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        filename = f"{plot_type}_{metric}_combined.png"
+        filepath = os.path.join(plot_folders['combined'], filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    print(f"  ✅ Generated 4 types of plots for {plot_type}:")
+    print(f"     - Error bar plots: {plot_folders['error_bar']}")
+    print(f"     - Scatter plots: {plot_folders['scatter']}")
+    print(f"     - Mean line plots: {plot_folders['mean']}")
+    print(f"     - Combined plots: {plot_folders['combined']}")
 
 
 def save_raw_data(plot_type: str, x_values: List[float], 
@@ -406,7 +501,8 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     
     print("\n" + "=" * 70)
     print("🎉 Experiment Completed Successfully!")
-    print(f"📊 Generated 8 plots (2 types × 4 metrics)")
+    print(f"📊 Generated 32 plots (2 types × 4 metrics × 4 plot styles)")
+    print(f"📁 Plot types: Error bars, Scatter points, Mean lines, Combined")
     print()
     print("⏱️  Timing Summary:")
     print(f"   Plot Type 1 (Zealot Numbers): {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
@@ -438,13 +534,27 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
         for combo in combinations['morality_ratios']:
             f.write(f"  - {combo['label']}\n")
         
-        f.write(f"\nGenerated plots:\n")
-        for plot_type in ['zealot_numbers', 'morality_ratios']:
-            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
-                f.write(f"  - {plot_type}_{metric}.png\n")
+        f.write(f"\nGenerated plots (32 total: 2 types × 4 metrics × 4 styles):\n")
+        f.write(f"Plot styles: error_bar, scatter, mean, combined\n\n")
+        
+        plot_folders = ['error_bar_plots', 'scatter_plots', 'mean_plots', 'combined_plots']
+        for folder in plot_folders:
+            f.write(f"{folder}/:\n")
+            for plot_type in ['zealot_numbers', 'morality_ratios']:
+                for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
+                    if folder == 'error_bar_plots':
+                        filename = f"{plot_type}_{metric}.png"
+                    elif folder == 'scatter_plots':
+                        filename = f"{plot_type}_{metric}_scatter.png"
+                    elif folder == 'mean_plots':
+                        filename = f"{plot_type}_{metric}_mean.png"
+                    else:  # combined_plots
+                        filename = f"{plot_type}_{metric}_combined.png"
+                    f.write(f"  - {filename}\n")
+            f.write("\n")
         
         # 添加性能统计
-        f.write(f"\nPerformance Statistics:\n")
+        f.write(f"Performance Statistics:\n")
         f.write(f"Average time per zealot combination: {plot1_duration/len(combinations['zealot_numbers']):.2f}s\n")
         f.write(f"Average time per morality combination: {plot2_duration/len(combinations['morality_ratios']):.2f}s\n")
         f.write(f"Total parameter points processed: {len(zealot_x_values) * len(combinations['zealot_numbers']) + len(morality_x_values) * len(combinations['morality_ratios'])}\n")
@@ -455,7 +565,7 @@ if __name__ == "__main__":
     # 运行实验
     run_zealot_morality_analysis(
         output_dir="results/zealot_morality_analysis",
-        num_runs=20,  # 可以调整运行次数以平衡速度和精度
-        max_zealots=30,  # 可以调整最大zealot数量
-        max_morality=30  # 可以调整最大morality ratio
+        num_runs=10,  # 可以调整运行次数以平衡速度和精度
+        max_zealots=50,  # 可以调整最大zealot数量
+        max_morality=100  # 可以调整最大morality ratio
     ) 
