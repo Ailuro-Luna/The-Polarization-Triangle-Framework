@@ -445,6 +445,17 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     for folder in plot_folders.values():
         os.makedirs(folder, exist_ok=True)
     
+    # 简化标签函数
+    def simplify_label(combo_label):
+        """简化组合标签，使其更短"""
+        # 替换常见的长词为缩写
+        # label = combo_label.replace('Clustered', 'Clust').replace('Random', 'Rand')
+        # label = label.replace('Zealots', 'Z').replace('Morality', 'M')
+        # label = label.replace('ID-align', 'Align').replace('ID-cluster', 'Clust')
+        # label = label.replace('True', 'T').replace('False', 'F')
+        # return label
+        return combo_label
+    
     # 为每个指标创建多种类型的图
     for metric in metrics:
         print(f"  Generating plots for {metric_labels[metric]}...")
@@ -485,17 +496,18 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
         title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
         
         # 1. 带误差条的图
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(14, 8))  # 稍微增加宽度
         for combo_label, data in processed_data.items():
             runs_info = total_runs_per_combination.get(combo_label, 0)
-            label_with_runs = f"{combo_label} (n={runs_info})"
+            short_label = simplify_label(combo_label)
+            label_with_runs = f"{short_label} (n={runs_info})"
             plt.errorbar(x_values, data['means'], yerr=data['stds'], 
                         label=label_with_runs, marker='o', linewidth=2, capsize=3, alpha=0.8)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (With Error Bars){title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)  # 图例放在下方，2列
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
@@ -505,19 +517,20 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
         plt.close()
         
         # 2. 散点图
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(14, 8))
         colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
         
         for i, (combo_label, data) in enumerate(scatter_data.items()):
             runs_info = total_runs_per_combination.get(combo_label, 0)
-            label_with_runs = f"{combo_label} (n={runs_info})"
+            short_label = simplify_label(combo_label)
+            label_with_runs = f"{short_label} (n={runs_info})"
             plt.scatter(data['x'], data['y'], label=label_with_runs, alpha=0.6, 
                        color=colors[i], s=30)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data Points){title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
@@ -527,17 +540,18 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
         plt.close()
         
         # 3. 均值曲线图
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(14, 8))
         for combo_label, data in processed_data.items():
             runs_info = total_runs_per_combination.get(combo_label, 0)
-            label_with_runs = f"{combo_label} (n={runs_info})"
+            short_label = simplify_label(combo_label)
+            label_with_runs = f"{short_label} (n={runs_info})"
             plt.plot(x_values, data['means'], label=label_with_runs, marker='o', 
                     linewidth=2, markersize=6, alpha=0.8)
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Mean Values Only){title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
@@ -547,27 +561,28 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
         plt.close()
         
         # 4. 组合图
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(14, 8))
         colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
         
         for i, (combo_label, scatter_pts) in enumerate(scatter_data.items()):
             color = colors[i]
             runs_info = total_runs_per_combination.get(combo_label, 0)
+            short_label = simplify_label(combo_label)
             
             # 绘制散点（较淡的颜色）
             plt.scatter(scatter_pts['x'], scatter_pts['y'], alpha=0.4, 
-                       color=color, s=20, label=f'{combo_label} (raw, n={runs_info})')
+                       color=color, s=20, label=f'{short_label} raw (n={runs_info})')
             
             # 绘制均值曲线（较深的颜色）
             mean_data = processed_data[combo_label]
             plt.plot(x_values, mean_data['means'], color=color, 
                     marker='o', linewidth=3, markersize=8, alpha=0.9,
-                    label=f'{combo_label} (mean, n={runs_info})')
+                    label=f'{short_label} mean (n={runs_info})')
         
         plt.xlabel(x_label, fontsize=12)
         plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label} (Raw Data + Mean){title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
+        plt.legend(bbox_to_anchor=(0.5, -0.2), loc='upper center', ncol=2)  # 组合图需要更多空间
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
@@ -785,10 +800,10 @@ if __name__ == "__main__":
     # 可以多次运行以下命令来积累数据：
     run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=5,  # 每次运行5轮测试
-        max_zealots=50,  
+        num_runs=100,  # 每次运行100轮测试
+        max_zealots=100,  
         max_morality=100,
-        batch_name="batch_001"  # 可选：给批次命名
+        # batch_name="batch_001"  # 可选：给批次命名
     )
     
     data_collection_end_time = time.time()
