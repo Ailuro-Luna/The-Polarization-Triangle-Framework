@@ -71,7 +71,7 @@ def create_config_combinations():
     
     # 图2：x轴为morality ratio的组合
     # 比较 "clustering zealots or not", "zealots aligned with identity", "identity distribution"
-    zealot_modes = ['random', 'clustered']
+    zealot_modes = ['random', 'clustered', 'none']
     zealot_identity_alignments = [True, False]  # zealots aligned with identity
     identity_distributions = [False, True]  # random vs clustered identity distribution
     
@@ -79,17 +79,31 @@ def create_config_combinations():
     fixed_zealot_count = 20
     
     for zealot_mode in zealot_modes:
-        for zealot_identity in zealot_identity_alignments:
+        if zealot_mode == 'none':
+            # 对于 none zealot，ID-align 参数没有意义，只区分 identity distribution
             for identity_dist in identity_distributions:
                 combo = {
-                    'zealot_count': fixed_zealot_count,
+                    'zealot_count': 0,
                     'zealot_mode': zealot_mode,
-                    'zealot_identity_allocation': zealot_identity,
+                    'zealot_identity_allocation': True,  # 设为默认值，但不影响结果
                     'cluster_identity': identity_dist,
-                    'label': f'{zealot_mode.capitalize()}, ID-align={zealot_identity}, ID-cluster={identity_dist}',
+                    'label': f'{zealot_mode.capitalize()}, ID-cluster={identity_dist}',
                     'steps': base_config.steps
                 }
                 combinations['morality_ratios'].append(combo)
+        else:
+            # 对于有 zealot 的情况，需要区分 ID-align 和 ID-cluster
+            for zealot_identity in zealot_identity_alignments:
+                for identity_dist in identity_distributions:
+                    combo = {
+                        'zealot_count': fixed_zealot_count,
+                        'zealot_mode': zealot_mode,
+                        'zealot_identity_allocation': zealot_identity,
+                        'cluster_identity': identity_dist,
+                        'label': f'{zealot_mode.capitalize()}, ID-align={zealot_identity}, ID-cluster={identity_dist}',
+                        'steps': base_config.steps
+                    }
+                    combinations['morality_ratios'].append(combo)
     
     return combinations
 
@@ -174,7 +188,7 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
         base_config.zealot_mode = combination['zealot_mode']
         base_config.zealot_identity_allocation = combination['zealot_identity_allocation']
         base_config.cluster_identity = combination['cluster_identity']
-        base_config.enable_zealots = True
+        base_config.enable_zealots = combination['zealot_mode'] != 'none'
         base_config.steps = combination['steps']
     
     # 对每个x值进行多次运行
@@ -782,6 +796,202 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     plot_from_accumulated_data(output_dir)
 
 
+def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analysis", 
+                               num_runs: int = 5, max_morality: int = 30,
+                               batch_name: str = ""):
+    """
+    单独运行 no zealot 的 morality ratio 数据收集
+    
+    Args:
+    output_dir: 输出目录
+    num_runs: 每个参数点的运行次数
+    max_morality: 最大 morality ratio (%)
+    batch_name: 批次名称
+    """
+    print("🔬 Running No Zealot Morality Ratio Data Collection")
+    print("=" * 70)
+    
+    start_time = time.time()
+    
+    # 创建输出目录
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 获取所有参数组合
+    combinations = create_config_combinations()
+    
+    # 只选择 zealot_mode 为 'none' 的组合
+    no_zealot_combinations = [combo for combo in combinations['morality_ratios'] 
+                             if combo['zealot_mode'] == 'none']
+    
+    if not no_zealot_combinations:
+        print("❌ 没有找到 zealot_mode='none' 的组合")
+        return
+    
+    if not batch_name:
+        batch_name = f"no_zealot_{time.strftime('%Y%m%d_%H%M%S')}"
+    
+    print(f"📊 No Zealot Batch Configuration:")
+    print(f"   Batch name: {batch_name}")
+    print(f"   Number of runs this batch: {num_runs}")
+    print(f"   Max morality ratio: {max_morality}%")
+    print(f"   Number of no-zealot combinations: {len(no_zealot_combinations)}")
+    print(f"   Output directory: {output_dir}")
+    print()
+    
+    # 设置 morality ratio 的 x 轴取值
+    morality_x_values = list(range(0, max_morality + 1, 2))  # 0, 2, 4, ..., max_morality
+    morality_results = {}
+    
+    print("📈 Running No Zealot Morality Ratio Analysis")
+    print("-" * 50)
+    
+    for combo in no_zealot_combinations:
+        print(f"Running no-zealot combination: {combo['label']}")
+        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
+        morality_results[combo['label']] = results
+    
+    # 保存 no zealot morality ratio 数据
+    save_data_incrementally('morality_ratios', morality_x_values, morality_results, output_dir, batch_name)
+    
+    # 计算耗时
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    hours, remainder = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    print("\n" + "=" * 70)
+    print("🎉 No Zealot Data Collection Completed Successfully!")
+    print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
+    print(f"⏱️  Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
+    
+    # 保存批次信息
+    batch_info_file = os.path.join(output_dir, "accumulated_data", f"batch_info_{batch_name}.txt")
+    with open(batch_info_file, "w") as f:
+        f.write(f"No Zealot Batch Information\n")
+        f.write(f"===========================\n\n")
+        f.write(f"Batch name: {batch_name}\n")
+        f.write(f"Number of runs: {num_runs}\n")
+        f.write(f"Max morality ratio: {max_morality}%\n")
+        f.write(f"Number of combinations: {len(no_zealot_combinations)}\n")
+        f.write(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
+        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"\nCombinations run:\n")
+        for combo in no_zealot_combinations:
+            f.write(f"  - {combo['label']}\n")
+
+
+def run_complete_no_zealot_analysis(output_dir: str = "results/zealot_morality_analysis", 
+                                  num_runs: int = 5, max_morality: int = 30):
+    """
+    运行完整的 no zealot 分析：数据收集 + 图表生成
+    
+    Args:
+    output_dir: 输出目录
+    num_runs: 每个参数点的运行次数
+    max_morality: 最大 morality ratio (%)
+    """
+    print("🔬 Starting Complete No Zealot Analysis")
+    print("=" * 70)
+    
+    # 第一步：运行 no zealot 数据收集
+    run_no_zealot_morality_data(output_dir, num_runs, max_morality)
+    
+    # 第二步：从累积数据生成图表
+    plot_from_accumulated_data(output_dir)
+
+
+def test_combinations():
+    """
+    测试函数：显示所有参数组合，验证 none zealot 的组合是否正确
+    """
+    combinations = create_config_combinations()
+    
+    print("📊 参数组合测试结果:")
+    print("=" * 50)
+    
+    print(f"图1 (Zealot Numbers) 组合数: {len(combinations['zealot_numbers'])}")
+    for i, combo in enumerate(combinations['zealot_numbers']):
+        print(f"  {i+1}. {combo['label']}")
+    
+    print(f"\n图2 (Morality Ratios) 组合数: {len(combinations['morality_ratios'])}")
+    
+    # 按 zealot_mode 分组显示
+    none_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'none']
+    random_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'random']
+    clustered_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'clustered']
+    
+    print(f"\n  None Zealot 组合数: {len(none_combos)}")
+    for i, combo in enumerate(none_combos):
+        print(f"    {i+1}. {combo['label']}")
+    
+    print(f"\n  Random Zealot 组合数: {len(random_combos)}")
+    for i, combo in enumerate(random_combos):
+        print(f"    {i+1}. {combo['label']}")
+    
+    print(f"\n  Clustered Zealot 组合数: {len(clustered_combos)}")
+    for i, combo in enumerate(clustered_combos):
+        print(f"    {i+1}. {combo['label']}")
+    
+    print(f"\n总计 Morality Ratios 组合: {len(combinations['morality_ratios'])}")
+    print("预期组合数: 2 (none) + 4 (random) + 4 (clustered) = 10")
+
+
+# if __name__ == "__main__":
+#     # 新的 main 函数：单独运行 no zealot 数据收集
+    
+#     print("🚀 Running No Zealot Data Collection")
+#     print("=" * 50)
+    
+#     # 开始计时
+#     main_start_time = time.time()
+    
+#     # 运行 no zealot 数据收集
+#     data_collection_start_time = time.time()
+    
+#     run_no_zealot_morality_data(
+#         output_dir="results/zealot_morality_analysis",
+#         num_runs=450,  # 每个参数点运行 100 次
+#         max_morality=100,  # morality ratio 从 0% 到 100%
+#         batch_name="no_zealot_batch_001"  # 给批次命名
+#     )
+    
+#     data_collection_end_time = time.time()
+#     data_collection_duration = data_collection_end_time - data_collection_start_time
+    
+#     # 绘图阶段
+#     plotting_start_time = time.time()
+    
+#     plot_from_accumulated_data("results/zealot_morality_analysis")
+    
+#     plotting_end_time = time.time()
+#     plotting_duration = plotting_end_time - plotting_start_time
+    
+#     # 计算总耗时
+#     main_end_time = time.time()
+#     total_duration = main_end_time - main_start_time
+    
+#     # 格式化耗时显示
+#     def format_duration(duration):
+#         hours, remainder = divmod(duration, 3600)
+#         minutes, seconds = divmod(remainder, 60)
+#         return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+    
+#     # 显示耗时总结
+#     print("\n" + "🕒" * 50)
+#     print("⏱️  No Zealot 实验耗时总结")
+#     print("🕒" * 50)
+#     print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
+#     print(f"📈 图表生成阶段耗时: {format_duration(plotting_duration)}")
+#     print(f"🎯 总耗时: {format_duration(total_duration)}")
+#     print("🕒" * 50)
+    
+#     print("\n✅ No Zealot 分析完成！")
+#     print("📁 查看结果：results/zealot_morality_analysis/")
+
+
+
+
 if __name__ == "__main__":
     # 新的分离式使用方法：
     
@@ -800,7 +1010,7 @@ if __name__ == "__main__":
     # 可以多次运行以下命令来积累数据：
     run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=100,  # 每次运行100轮测试
+        num_runs=99,  # 每次运行100轮测试
         max_zealots=100,  
         max_morality=100,
         # batch_name="batch_001"  # 可选：给批次命名
