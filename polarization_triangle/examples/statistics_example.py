@@ -41,6 +41,14 @@ def example_usage():
         if i % 10 == 0:
             print(f"  完成步骤 {i}/50")
     
+    # 可选：生成可视化图表（如果需要的话，去掉下面的注释）
+    # from polarization_triangle.visualization.network_viz import draw_network
+    # import os
+    # os.makedirs("results/simple_visualization", exist_ok=True)
+    # draw_network(sim, "opinion", "Final Opinion Network", "results/simple_visualization/final_opinion.png")
+    # draw_network(sim, "identity", "Final Identity Network", "results/simple_visualization/final_identity.png") 
+    # print("📊 可视化图表已保存到 results/simple_visualization/")
+    
     print("\n" + "="*60)
     print("统计分析示例")
     print("="*60)

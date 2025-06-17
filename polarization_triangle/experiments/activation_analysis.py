@@ -1,7 +1,7 @@
 import copy
 import os
 from core.simulation import Simulation
-from core.config import lfr_config
+from core.config import base_config
 from analysis.trajectory import run_simulation_with_trajectory
 from visualization.activation_viz import draw_activation_components, draw_activation_history, draw_activation_heatmap, draw_activation_trajectory
 from visualization.network_viz import draw_network
@@ -18,7 +18,7 @@ def analyze_activation_components(output_dir = "activation_analysis", steps = 50
     morality_rates = [0.0, 0.3, 0.5, 0.7, 1.0]
     
     # 基本配置
-    base_params = copy.deepcopy(lfr_config)
+    base_params = copy.deepcopy(base_config)
     base_params.num_agents = 500  # 减少代理数量以加快测试
     
     # 为每个道德化率创建单独的文件夹

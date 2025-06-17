@@ -20,6 +20,83 @@ from polarization_triangle.experiments.model_params_test import batch_test_model
 from polarization_triangle.experiments.activation_analysis import analyze_activation_components
 
 
+def run_single_simulation(output_dir="results/single_run", steps=300):
+    """
+    运行单次模拟并生成基本的可视化结果
+    
+    参数:
+    output_dir: 输出目录
+    steps: 模拟步数
+    """
+    import copy
+    from polarization_triangle.core.config import base_config
+    from polarization_triangle.core.simulation import Simulation
+    from polarization_triangle.visualization.network_viz import draw_network
+    from polarization_triangle.visualization.opinion_viz import draw_opinion_distribution_heatmap
+    from polarization_triangle.analysis.trajectory import run_simulation_with_trajectory
+    from polarization_triangle.analysis.statistics import print_statistics_summary
+    
+    print(f"🚀 运行单次模拟...")
+    print(f"📊 模拟步数: {steps}")
+    print(f"📁 输出目录: {output_dir}")
+    
+    # 创建输出目录
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 使用base_config
+    config = copy.deepcopy(base_config)
+    print(f"🔧 使用配置: base_config")
+    print(f"   Agent数量: {config.num_agents}")
+    print(f"   网络类型: {config.network_type}")
+    print(f"   道德化率: {config.morality_rate}")
+    
+    # 创建模拟实例
+    print("🏗️  创建模拟...")
+    sim = Simulation(config)
+    
+    # 绘制初始网络
+    print("📈 绘制初始网络...")
+    draw_network(sim, "opinion", "Initial Opinion Network", 
+                os.path.join(output_dir, "initial_opinion.png"))
+    draw_network(sim, "identity", "Initial Identity Network", 
+                os.path.join(output_dir, "initial_identity.png"))
+    draw_network(sim, "morality", "Initial Morality Network", 
+                os.path.join(output_dir, "initial_morality.png"))
+    
+    # 运行模拟并记录轨迹
+    print(f"⚡ 运行模拟 {steps} 步...")
+    trajectory = run_simulation_with_trajectory(sim, steps=steps)
+    
+    # 生成可视化
+    print("📊 生成可视化...")
+    draw_opinion_distribution_heatmap(
+        trajectory, 
+        "Opinion Evolution Over Time", 
+        os.path.join(output_dir, "opinion_evolution.png")
+    )
+    
+    # 绘制最终网络
+    draw_network(sim, "opinion", "Final Opinion Network", 
+                os.path.join(output_dir, "final_opinion.png"))
+    draw_network(sim, "identity", "Final Identity Network", 
+                os.path.join(output_dir, "final_identity.png"))
+    draw_network(sim, "morality", "Final Morality Network", 
+                os.path.join(output_dir, "final_morality.png"))
+    
+    # 打印统计摘要
+    print("\n📋 统计摘要:")
+    print("=" * 50)
+    print_statistics_summary(sim, exclude_zealots=True)
+    
+    print(f"\n🎉 单次模拟完成！结果已保存到: {output_dir}")
+    print("📁 生成的文件:")
+    print("   - initial_*.png (初始网络)")
+    print("   - opinion_evolution.png (意见演化热图)")
+    print("   - final_*.png (最终网络)")
+    
+    return sim
+
+
 def main():
     """
     Main entry function
@@ -27,9 +104,9 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Polarization Triangle Framework Simulation")
     parser.add_argument("--test-type", 
-                        choices=["basic", "morality", "model-params", "activation", "verification"],
+                        choices=["basic", "single", "morality", "model-params", "activation", "verification"],
                         default="basic",
-                        help="Type of test to run")
+                        help="Type of test to run: 'basic' for batch tests, 'single' for one simulation")
     parser.add_argument("--output-dir", type=str, default="batch_results",
                        help="Output directory name")
     parser.add_argument("--steps", type=int, default=200,
@@ -65,6 +142,10 @@ def main():
         print("Running basic simulation...")
         # Use batch_test from experiments module
         batch_test(output_dir=args.output_dir, steps=args.steps)
+        
+    elif args.test_type == "single":
+        print("Running single simulation...")
+        run_single_simulation(output_dir=args.output_dir, steps=args.steps)
         
     elif args.test_type == "morality":
         print(f"Running morality rate test, morality rates: {args.morality_rates}...")

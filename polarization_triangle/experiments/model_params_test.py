@@ -1,7 +1,7 @@
 import copy
 import os
 from core.simulation import Simulation
-from core.config import lfr_config
+from core.config import base_config
 from analysis.trajectory import run_simulation_with_trajectory
 from visualization.opinion_viz import draw_opinion_distribution, draw_opinion_distribution_heatmap, draw_opinion_trajectory
 from visualization.network_viz import draw_network
@@ -52,7 +52,7 @@ def batch_test_model_params(output_dir = "model_params_test", steps = 200):
             os.makedirs(folder_path)
         
         # 创建模拟配置
-        params = copy.deepcopy(lfr_config)
+        params = copy.deepcopy(base_config)
         
         # 设置模型参数
         params.delta = param_set['delta']

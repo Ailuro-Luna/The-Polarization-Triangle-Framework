@@ -1,7 +1,7 @@
 import copy
 import os
 from core.simulation import Simulation
-from core.config import lfr_config
+from core.config import base_config
 from visualization.rule_viz import draw_rule_usage, draw_rule_cumulative_usage
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +21,7 @@ def batch_test_morality_rates(output_dir = "morality_rate_test", steps = 200, mo
         print(f"Testing morality rate: {mor_rate}")
         
         # 创建模拟配置
-        params = copy.deepcopy(lfr_config)
+        params = copy.deepcopy(base_config)
         params.morality_rate = mor_rate
         
         # 运行模拟
