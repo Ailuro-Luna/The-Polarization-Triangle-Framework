@@ -16,7 +16,7 @@ def draw_opinion_distribution(sim, title, filename, bins=20):
     plt.close()
 
 
-def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_scale=False, 
+def draw_opinion_distribution_heatmap(history, title, filename, bins=50, log_scale=True, 
                                       cmap='viridis', vmin=None, vmax=None, custom_norm=None):
     """
     绘制三维热力图，展示opinion分布随时间的变化。

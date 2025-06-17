@@ -208,7 +208,7 @@ def generate_average_heatmaps(all_opinion_histories, mode_names, output_dir, hea
     # 设置默认的热力图配置
     default_config = {
         'bins': 160,
-        'log_scale': False,
+        'log_scale': True,
         'cmap': 'viridis',
         'vmin': None,
         'vmax': None,
