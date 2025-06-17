@@ -20,13 +20,20 @@ from polarization_triangle.experiments.model_params_test import batch_test_model
 from polarization_triangle.experiments.activation_analysis import analyze_activation_components
 
 
-def run_single_simulation(output_dir="results/single_run", steps=300):
+def run_single_simulation(output_dir="results/single_run", steps=300, 
+                         zealot_count=0, zealot_mode="random", zealot_opinion=1.0,
+                         zealot_morality=False, zealot_identity_allocation=True):
     """
     运行单次模拟并生成基本的可视化结果
     
     参数:
     output_dir: 输出目录
     steps: 模拟步数
+    zealot_count: zealot数量
+    zealot_mode: zealot选择模式 (random, degree, clustered)
+    zealot_opinion: zealot固定意见值
+    zealot_morality: zealot是否都是道德化的
+    zealot_identity_allocation: 是否只从identity=1的agent中选择zealot
     """
     import copy
     from polarization_triangle.core.config import base_config
@@ -43,16 +50,42 @@ def run_single_simulation(output_dir="results/single_run", steps=300):
     # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
     
-    # 使用base_config
+    # 使用base_config并配置zealot
     config = copy.deepcopy(base_config)
+    
+    # 配置zealot参数
+    has_zealots = zealot_count > 0
+    if has_zealots:
+        config.enable_zealots = True
+        config.zealot_count = zealot_count
+        config.zealot_mode = zealot_mode
+        config.zealot_opinion = zealot_opinion
+        config.zealot_morality = zealot_morality
+        config.zealot_identity_allocation = zealot_identity_allocation
+    
     print(f"🔧 使用配置: base_config")
     print(f"   Agent数量: {config.num_agents}")
     print(f"   网络类型: {config.network_type}")
     print(f"   道德化率: {config.morality_rate}")
+    if has_zealots:
+        print(f"   🎯 Zealot配置:")
+        print(f"      数量: {zealot_count}")
+        print(f"      模式: {zealot_mode}")
+        print(f"      意见值: {zealot_opinion}")
+        print(f"      道德化: {zealot_morality}")
+        print(f"      身份分配: {zealot_identity_allocation}")
+    else:
+        print(f"   🎯 无Zealot")
     
     # 创建模拟实例
     print("🏗️  创建模拟...")
     sim = Simulation(config)
+    
+    # 显示zealot信息
+    if has_zealots:
+        zealot_ids = sim.get_zealot_ids()
+        print(f"   Zealot IDs: {zealot_ids}")
+        print(f"   实际Zealot数量: {len(zealot_ids)}")
     
     # 绘制初始网络
     print("📈 绘制初始网络...")
@@ -65,7 +98,21 @@ def run_single_simulation(output_dir="results/single_run", steps=300):
     
     # 运行模拟并记录轨迹
     print(f"⚡ 运行模拟 {steps} 步...")
-    trajectory = run_simulation_with_trajectory(sim, steps=steps)
+    if has_zealots:
+        # 对于有zealot的情况，手动记录轨迹以确保zealot意见正确记录
+        trajectory = []
+        trajectory.append(sim.opinions.copy())
+        
+        for step in range(steps):
+            sim.step()  # step方法中会自动调用set_zealot_opinions()
+            trajectory.append(sim.opinions.copy())
+            
+            # 每50步打印一次进度
+            if (step + 1) % 50 == 0:
+                print(f"   完成 {step + 1}/{steps} 步")
+    else:
+        # 对于无zealot的情况，使用现有的轨迹记录函数
+        trajectory = run_simulation_with_trajectory(sim, steps=steps)
     
     # 生成可视化
     print("📊 生成可视化...")
@@ -88,11 +135,27 @@ def run_single_simulation(output_dir="results/single_run", steps=300):
     print("=" * 50)
     print_statistics_summary(sim, exclude_zealots=True)
     
+    if has_zealots:
+        print("\n🎯 Zealot最终状态:")
+        print("-" * 30)
+        zealot_ids = sim.get_zealot_ids()
+        print(f"Zealot数量: {len(zealot_ids)}")
+        print(f"Zealot IDs: {zealot_ids}")
+        print(f"Zealot意见值: {[sim.opinions[i] for i in zealot_ids]}")
+        print(f"预期Zealot意见值: {zealot_opinion}")
+        
+        # 也显示包含zealot的统计
+        print("\n📊 包含Zealot的统计:")
+        print("-" * 30)
+        print_statistics_summary(sim, exclude_zealots=False)
+    
     print(f"\n🎉 单次模拟完成！结果已保存到: {output_dir}")
     print("📁 生成的文件:")
     print("   - initial_*.png (初始网络)")
     print("   - opinion_evolution.png (意见演化热图)")
     print("   - final_*.png (最终网络)")
+    if has_zealots:
+        print("   📝 注意：网络图中Zealot会以金色边框突出显示")
     
     return sim
 
@@ -135,6 +198,19 @@ def main():
     parser.add_argument("--num-runs", type=int, default=10,
                        help="Number of simulation runs per parameter combination for alphabeta analysis")
     
+    # Zealot相关参数
+    parser.add_argument("--zealot-count", type=int, default=20,
+                       help="Number of zealots (0 to disable zealots)")
+    parser.add_argument("--zealot-mode", type=str, choices=["random", "degree", "clustered"], 
+                       default="random",
+                       help="Zealot selection mode")
+    parser.add_argument("--zealot-opinion", type=float, default=1.0,
+                       help="Fixed opinion value for zealots")
+    parser.add_argument("--zealot-morality", action='store_true',
+                       help="Make all zealots moralizing (morality=1)")
+    parser.add_argument("--zealot-identity-allocation", action='store_true', default=True,
+                       help="Only allocate zealots to agents with identity=1")
+    
     args = parser.parse_args()
     
     # Run different tests based on test type
@@ -145,7 +221,15 @@ def main():
         
     elif args.test_type == "single":
         print("Running single simulation...")
-        run_single_simulation(output_dir=args.output_dir, steps=args.steps)
+        run_single_simulation(
+            output_dir=args.output_dir, 
+            steps=args.steps,
+            zealot_count=args.zealot_count,
+            zealot_mode=args.zealot_mode,
+            zealot_opinion=args.zealot_opinion,
+            zealot_morality=args.zealot_morality,
+            zealot_identity_allocation=args.zealot_identity_allocation
+        )
         
     elif args.test_type == "morality":
         print(f"Running morality rate test, morality rates: {args.morality_rates}...")
