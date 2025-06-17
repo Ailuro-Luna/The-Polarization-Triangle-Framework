@@ -9,7 +9,7 @@ It generates two types of plots:
 For each plot type, it generates 4 different Y-axis metrics:
 - Mean opinion
 - Variance 
-- Variance per identity
+- Identity opinion difference (between identity groups)
 - Polarization index
 
 Total: 8 plots (2 types × 4 metrics)
@@ -131,18 +131,15 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
     identity_stats = calculate_identity_statistics(sim, exclude_zealots=True)
     polarization = get_polarization_index(sim)
     
-    # 计算variance per identity (身份间方差)
+    # 计算identity opinion difference (身份间意见差异)
+    # 注意：为保持数据兼容性，变量名仍使用variance_per_identity
     variance_per_identity = 0.0
     if 'identity_difference' in identity_stats:
         variance_per_identity = identity_stats['identity_difference']['abs_mean_opinion_difference']
     else:
-        # 如果没有identity_difference，计算所有身份的方差均值
-        identity_variances = []
-        for key, values in identity_stats.items():
-            if key.startswith('identity_') and key != 'identity_difference':
-                identity_variances.append(values['variance'])
-        if identity_variances:
-            variance_per_identity = np.mean(identity_variances)
+        # 理论上在正常情况下不应该到达这里（zealot数量足够小时）
+        print("Warning: identity_difference not found, this should not happen under normal conditions")
+        variance_per_identity = 0.0
     
     return {
         'mean_opinion': mean_stats['mean_opinion'],
@@ -433,7 +430,7 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     metric_labels = {
         'mean_opinion': 'Mean Opinion',
         'variance': 'Opinion Variance',
-        'variance_per_identity': 'Variance per Identity',
+        'variance_per_identity': 'Identity Opinion Difference',
         'polarization_index': 'Polarization Index'
     }
     
@@ -448,168 +445,237 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     else:
         runs_suffix = f"_{min_runs}-{max_runs}runs"
     
-    # 创建子文件夹
+    # 创建 mean_plots 文件夹
     plot_folders = {
-        'error_bar': os.path.join(output_dir, 'error_bar_plots'),
-        'scatter': os.path.join(output_dir, 'scatter_plots'),
-        'mean': os.path.join(output_dir, 'mean_plots'),
-        'combined': os.path.join(output_dir, 'combined_plots')
+        'mean': os.path.join(output_dir, 'mean_plots')
     }
     
-    for folder in plot_folders.values():
-        os.makedirs(folder, exist_ok=True)
-    
-    # 简化标签函数
+    os.makedirs(plot_folders['mean'], exist_ok=True)
+
+    # 增强版样式配置函数（专门为morality_ratios优化）
+    def get_enhanced_style_config(combo_labels):
+        """
+        为组合标签生成增强的样式配置，特别针对morality_ratios的10条线进行优化
+        """
+        # 定义扩展的颜色调色板
+        colors = [
+            '#1f77b4',  # 蓝色
+            '#ff7f0e',  # 橙色  
+            '#2ca02c',  # 绿色
+            '#d62728',  # 红色
+            '#9467bd',  # 紫色
+            '#8c564b',  # 棕色
+            '#e377c2',  # 粉色
+            '#7f7f7f',  # 灰色
+            '#bcbd22',  # 橄榄色
+            '#17becf',  # 青色
+            '#aec7e8',  # 浅蓝色
+            '#ffbb78'   # 浅橙色
+        ]
+        
+        # 定义多种线型
+        linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 5)), (0, (3, 3)), (0, (1, 1))]
+        
+        # 定义多种标记
+        markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
+        
+        style_config = {}
+        
+        if plot_type == 'morality_ratios':
+            # 定义颜色映射：按zealot模式和ID-align分组
+            zealot_mode_colors = {
+                'None': {
+                    'base': '#505050',      # 深灰色 (ID-cluster=True)
+                    'light': '#c0c0c0'      # 浅灰色 (ID-cluster=False)
+                },
+                'Random': {
+                    'base': '#ff4500',      # 深橙红色 (ID-align=True)
+                    'light': '#ff8080'      # 浅粉红色 (ID-align=False)  
+                },
+                'Clustered': {
+                    'base': '#0066cc',      # 深蓝色 (ID-align=True)
+                    'light': '#00cc66'      # 亮绿色 (ID-align=False)
+                }
+            }
+            
+            # 定义标记映射：按ID-cluster分组
+            id_cluster_markers = {
+                'True': 'o',      # 圆形表示ID-cluster=True
+                'False': '^'      # 三角形表示ID-cluster=False (改为更明显的形状)
+            }
+            
+            # 定义标记大小映射：按ID-align分组
+            id_align_sizes = {
+                'True': 10,        # 大标记表示ID-align=True (增大差异)
+                'False': 5         # 小标记表示ID-align=False
+            }
+            
+            # 添加调试信息
+            print(f"\n📝 Style Configuration for {plot_type}: {len(combo_labels)} combinations")
+            
+            for label in combo_labels:
+                # 解析标签中的配置信息
+                if 'None' in label:
+                    zealot_mode = 'None'
+                    # 从标签中提取ID-cluster值 (格式: "None  ID-cluster True/False")
+                    if 'ID-cluster True' in label:
+                        id_cluster = 'True'
+                        color = zealot_mode_colors[zealot_mode]['base']  # 深灰色
+                        marker = id_cluster_markers[id_cluster]  # 圆形
+                        markersize = 8  # None组统一标记大小
+                    else:  # ID-cluster False
+                        id_cluster = 'False'
+                        color = zealot_mode_colors[zealot_mode]['light']  # 浅灰色
+                        marker = id_cluster_markers[id_cluster]  # 三角形
+                        markersize = 8
+                    
+                    style_config[label] = {
+                        'color': color,
+                        'linestyle': '-',  # 统一使用实线
+                        'marker': marker,
+                        'markersize': markersize,
+                        'group': 'None'
+                    }
+                    
+                elif 'Random' in label:
+                    zealot_mode = 'Random'
+                    # 从标签中提取ID-align和ID-cluster值 (格式: "Random  ID-align True/False  ID-cluster True/False")
+                    id_align = 'True' if 'ID-align True' in label else 'False'
+                    id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                    
+                    # 根据ID-align选择颜色
+                    if id_align == 'True':
+                        color = zealot_mode_colors[zealot_mode]['base']  # 深橙红色
+                    else:
+                        color = zealot_mode_colors[zealot_mode]['light']  # 浅粉红色
+                    
+                    # 根据ID-cluster选择标记
+                    marker = id_cluster_markers[id_cluster]
+                    # 根据ID-align选择大小
+                    markersize = id_align_sizes[id_align]
+                    
+                    style_config[label] = {
+                        'color': color,
+                        'linestyle': '-',  # 统一使用实线
+                        'marker': marker,
+                        'markersize': markersize,
+                        'group': 'Random'
+                    }
+                    
+                elif 'Clustered' in label:
+                    zealot_mode = 'Clustered'
+                    # 从标签中提取ID-align和ID-cluster值 (格式: "Clustered  ID-align True/False  ID-cluster True/False")
+                    id_align = 'True' if 'ID-align True' in label else 'False'
+                    id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                    
+                    # 根据ID-align选择颜色
+                    if id_align == 'True':
+                        color = zealot_mode_colors[zealot_mode]['base']  # 深蓝色
+                    else:
+                        color = zealot_mode_colors[zealot_mode]['light']  # 亮绿色
+                    
+                    # 根据ID-cluster选择标记
+                    marker = id_cluster_markers[id_cluster]
+                    # 根据ID-align选择大小
+                    markersize = id_align_sizes[id_align]
+                    
+                    style_config[label] = {
+                        'color': color,
+                        'linestyle': '-',  # 统一使用实线
+                        'marker': marker,
+                        'markersize': markersize,
+                        'group': 'Clustered'
+                    }
+            
+            print(f"✅ Style configuration completed successfully") # 简化的成功信息
+        else:
+            # 对于zealot_numbers，使用简单配置
+            for i, label in enumerate(combo_labels):
+                style_config[label] = {
+                    'color': colors[i % len(colors)],
+                    'linestyle': linestyles[i % len(linestyles)],
+                    'marker': markers[i % len(markers)],
+                    'markersize': 7,
+                    'group': 'Default'
+                }
+        
+        return style_config
+
+    # 保持完整标签函数
     def simplify_label(combo_label):
-        """简化组合标签，使其更短"""
-        # 替换常见的长词为缩写
-        # label = combo_label.replace('Clustered', 'Clust').replace('Random', 'Rand')
-        # label = label.replace('Zealots', 'Z').replace('Morality', 'M')
-        # label = label.replace('ID-align', 'Align').replace('ID-cluster', 'Clust')
-        # label = label.replace('True', 'T').replace('False', 'F')
-        # return label
+        """保持原始标签，不进行简化以确保读者能理解完整含义"""
         return combo_label
     
-    # 为每个指标创建多种类型的图
+    # 获取样式配置
+    combo_labels = list(all_results.keys())
+    style_config = get_enhanced_style_config(combo_labels)
+    
+    # 为每个指标生成高质量的 mean plots
     for metric in metrics:
-        print(f"  Generating plots for {metric_labels[metric]}...")
+        print(f"  Generating high-quality mean plot for {metric_labels[metric]}...")
         
-        # 预处理数据：计算均值、标准差，并准备散点数据
+        # 预处理数据：计算均值
         processed_data = {}
-        scatter_data = {}
         
         for combo_label, results in all_results.items():
             metric_data = results[metric]
             means = []
-            stds = []
-            all_points_x = []
-            all_points_y = []
             
             for i, x_runs in enumerate(metric_data):
                 valid_runs = [val for val in x_runs if not np.isnan(val)]
                 if valid_runs:
                     means.append(np.mean(valid_runs))
-                    stds.append(np.std(valid_runs))
-                    # 为散点图收集所有数据点
-                    all_points_x.extend([x_values[i]] * len(valid_runs))
-                    all_points_y.extend(valid_runs)
                 else:
                     means.append(np.nan)
-                    stds.append(np.nan)
             
             processed_data[combo_label] = {
-                'means': np.array(means),
-                'stds': np.array(stds)
-            }
-            scatter_data[combo_label] = {
-                'x': all_points_x,
-                'y': all_points_y
+                'means': np.array(means)
             }
         
-        # 为每种图添加运行次数信息到标题（显示总run数）
+        # 添加运行次数信息到标题（显示总run数）
         title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
         
-        # 1. 带误差条的图
-        plt.figure(figsize=(14, 8))  # 稍微增加宽度
+        # 高质量均值曲线图
+        plt.figure(figsize=(20, 12) if plot_type == 'morality_ratios' else (18, 10))
         for combo_label, data in processed_data.items():
             runs_info = total_runs_per_combination.get(combo_label, 0)
             short_label = simplify_label(combo_label)
             label_with_runs = f"{short_label} (n={runs_info})"
-            plt.errorbar(x_values, data['means'], yerr=data['stds'], 
-                        label=label_with_runs, marker='o', linewidth=2, capsize=3, alpha=0.8)
+            
+            style = style_config.get(combo_label, {})
+            plt.plot(x_values, data['means'], label=label_with_runs, 
+                    color=style.get('color', 'blue'),
+                    linestyle=style.get('linestyle', '-'),
+                    marker=style.get('marker', 'o'), 
+                    linewidth=3.5, markersize=style.get('markersize', 10), alpha=0.85,
+                    markeredgewidth=2, markeredgecolor='white')
         
-        plt.xlabel(x_label, fontsize=12)
-        plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)  # 图例放在下方，2列
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
+        plt.xlabel(x_label, fontsize=16)
+        plt.ylabel(metric_labels[metric], fontsize=16)
+        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=18, fontweight='bold')
         
-        filename = f"{plot_type}_{metric}{runs_suffix}.png"
-        filepath = os.path.join(plot_folders['error_bar'], filename)
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.close()
+        if plot_type == 'morality_ratios':
+            plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, 
+                      fontsize=12, frameon=True, fancybox=True, shadow=True)
+        else:
+            plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize=12)
         
-        # 2. 散点图
-        plt.figure(figsize=(14, 8))
-        colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
-        
-        for i, (combo_label, data) in enumerate(scatter_data.items()):
-            runs_info = total_runs_per_combination.get(combo_label, 0)
-            short_label = simplify_label(combo_label)
-            label_with_runs = f"{short_label} (n={runs_info})"
-            plt.scatter(data['x'], data['y'], label=label_with_runs, alpha=0.6, 
-                       color=colors[i], s=30)
-        
-        plt.xlabel(x_label, fontsize=12)
-        plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        filename = f"{plot_type}_{metric}_scatter{runs_suffix}.png"
-        filepath = os.path.join(plot_folders['scatter'], filename)
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # 3. 均值曲线图
-        plt.figure(figsize=(14, 8))
-        for combo_label, data in processed_data.items():
-            runs_info = total_runs_per_combination.get(combo_label, 0)
-            short_label = simplify_label(combo_label)
-            label_with_runs = f"{short_label} (n={runs_info})"
-            plt.plot(x_values, data['means'], label=label_with_runs, marker='o', 
-                    linewidth=2, markersize=6, alpha=0.8)
-        
-        plt.xlabel(x_label, fontsize=12)
-        plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2)
-        plt.grid(True, alpha=0.3)
+        plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
         
         filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
         filepath = os.path.join(plot_folders['mean'], filename)
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
-        plt.close()
         
-        # 4. 组合图
-        plt.figure(figsize=(14, 8))
-        colors = plt.cm.tab10(np.linspace(0, 1, len(scatter_data)))
+        # 高质量PNG保存 (DPI 300)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight', 
+                   facecolor='white', edgecolor='white', 
+                   format='png', transparent=False, 
+                   pad_inches=0.1, metadata={'Creator': 'Zealot Morality Analysis'})
         
-        for i, (combo_label, scatter_pts) in enumerate(scatter_data.items()):
-            color = colors[i]
-            runs_info = total_runs_per_combination.get(combo_label, 0)
-            short_label = simplify_label(combo_label)
-            
-            # 绘制散点（较淡的颜色）
-            plt.scatter(scatter_pts['x'], scatter_pts['y'], alpha=0.4, 
-                       color=color, s=20, label=f'{short_label} raw (n={runs_info})')
-            
-            # 绘制均值曲线（较深的颜色）
-            mean_data = processed_data[combo_label]
-            plt.plot(x_values, mean_data['means'], color=color, 
-                    marker='o', linewidth=3, markersize=8, alpha=0.9,
-                    label=f'{short_label} mean (n={runs_info})')
-        
-        plt.xlabel(x_label, fontsize=12)
-        plt.ylabel(metric_labels[metric], fontsize=12)
-        plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(0.5, -0.2), loc='upper center', ncol=2)  # 组合图需要更多空间
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        
-        filename = f"{plot_type}_{metric}_combined{runs_suffix}.png"
-        filepath = os.path.join(plot_folders['combined'], filename)
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
         plt.close()
     
-    print(f"  ✅ Generated 4 types of plots for {plot_type} with run count info:")
-    print(f"     - Error bar plots: {plot_folders['error_bar']}")
-    print(f"     - Scatter plots: {plot_folders['scatter']}")
+    print(f"  ✅ Generated high-quality mean plots for {plot_type}:")
     print(f"     - Mean line plots: {plot_folders['mean']}")
-    print(f"     - Combined plots: {plot_folders['combined']}")
 
 
 def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis", 
@@ -937,87 +1003,32 @@ def test_combinations():
     print("预期组合数: 2 (none) + 4 (random) + 4 (clustered) = 10")
 
 
-# if __name__ == "__main__":
-#     # 新的 main 函数：单独运行 no zealot 数据收集
-    
-#     print("🚀 Running No Zealot Data Collection")
-#     print("=" * 50)
-    
-#     # 开始计时
-#     main_start_time = time.time()
-    
-#     # 运行 no zealot 数据收集
-#     data_collection_start_time = time.time()
-    
-#     run_no_zealot_morality_data(
-#         output_dir="results/zealot_morality_analysis",
-#         num_runs=450,  # 每个参数点运行 100 次
-#         max_morality=100,  # morality ratio 从 0% 到 100%
-#         batch_name="no_zealot_batch_001"  # 给批次命名
-#     )
-    
-#     data_collection_end_time = time.time()
-#     data_collection_duration = data_collection_end_time - data_collection_start_time
-    
-#     # 绘图阶段
-#     plotting_start_time = time.time()
-    
-#     plot_from_accumulated_data("results/zealot_morality_analysis")
-    
-#     plotting_end_time = time.time()
-#     plotting_duration = plotting_end_time - plotting_start_time
-    
-#     # 计算总耗时
-#     main_end_time = time.time()
-#     total_duration = main_end_time - main_start_time
-    
-#     # 格式化耗时显示
-#     def format_duration(duration):
-#         hours, remainder = divmod(duration, 3600)
-#         minutes, seconds = divmod(remainder, 60)
-#         return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
-    
-#     # 显示耗时总结
-#     print("\n" + "🕒" * 50)
-#     print("⏱️  No Zealot 实验耗时总结")
-#     print("🕒" * 50)
-#     print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
-#     print(f"📈 图表生成阶段耗时: {format_duration(plotting_duration)}")
-#     print(f"🎯 总耗时: {format_duration(total_duration)}")
-#     print("🕒" * 50)
-    
-#     print("\n✅ No Zealot 分析完成！")
-#     print("📁 查看结果：results/zealot_morality_analysis/")
-
-
-
-
 if __name__ == "__main__":
     # 新的分离式使用方法：
     
     # 开始计时
     main_start_time = time.time()
     
-    # 方法1：分两步运行
-    # 第一步：运行测试并积累数据（可以多次运行以积累更多数据）
-    print("=" * 50)
-    print("🚀 示例：分步骤运行实验")
-    print("=" * 50)
+    # # 方法1：分两步运行
+    # # 第一步：运行测试并积累数据（可以多次运行以积累更多数据）
+    # print("=" * 50)
+    # print("🚀 示例：分步骤运行实验")
+    # print("=" * 50)
     
-    # 数据收集阶段
-    data_collection_start_time = time.time()
+    # # 数据收集阶段
+    # data_collection_start_time = time.time()
     
-    # 可以多次运行以下命令来积累数据：
-    run_and_accumulate_data(
-        output_dir="results/zealot_morality_analysis",
-        num_runs=99,  # 每次运行100轮测试
-        max_zealots=100,  
-        max_morality=100,
-        # batch_name="batch_001"  # 可选：给批次命名
-    )
+    # # 可以多次运行以下命令来积累数据：
+    # run_and_accumulate_data(
+    #     output_dir="results/zealot_morality_analysis",
+    #     num_runs=99,  # 每次运行100轮测试
+    #     max_zealots=100,  
+    #     max_morality=100,
+    #     # batch_name="batch_001"  # 可选：给批次命名
+    # )
     
-    data_collection_end_time = time.time()
-    data_collection_duration = data_collection_end_time - data_collection_start_time
+    # data_collection_end_time = time.time()
+    # data_collection_duration = data_collection_end_time - data_collection_start_time
     
 
     # 第二步：绘图阶段
@@ -1043,7 +1054,7 @@ if __name__ == "__main__":
     print("\n" + "🕒" * 50)
     print("⏱️  完整实验耗时总结")
     print("🕒" * 50)
-    print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
+    # print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
     print(f"📈 图表生成阶段耗时: {format_duration(plotting_duration)}")
     print(f"🎯 总耗时: {format_duration(total_duration)}")
     print("🕒" * 50) 
