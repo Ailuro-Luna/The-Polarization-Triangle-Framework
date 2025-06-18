@@ -495,7 +495,7 @@ class MultiAgentVerification:
         
         # 2. 可视化身份
         fig, ax = plt.subplots(figsize=(10, 8))
-        node_colors = ['#e41a1c' if iden == 1 else '#377eb8' for iden in self.identities]
+        node_colors = ['#ff7f00' if iden == 1 else '#4daf4a' for iden in self.identities]
         nx.draw(self.graph, pos=self.pos, node_color=node_colors,
                 with_labels=False, node_size=600, alpha=0.8,
                 edge_color="#AAAAAA", ax=ax)
@@ -522,8 +522,8 @@ class MultiAgentVerification:
         
         ax.set_title(f"Rule {rule_name}: Agent Identities")
         patches = [
-            mpatches.Patch(color='#e41a1c', label='Identity: 1'),
-            mpatches.Patch(color='#377eb8', label='Identity: -1')
+            mpatches.Patch(color='#ff7f00', label='Identity: 1'),
+            mpatches.Patch(color='#4daf4a', label='Identity: -1')
         ]
         ax.legend(handles=patches, loc='upper right', title="Identity")
         plt.savefig(identity_path)

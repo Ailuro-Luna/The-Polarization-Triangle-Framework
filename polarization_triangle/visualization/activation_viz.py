@@ -32,7 +32,7 @@ def draw_activation_components(sim, title, filename):
     
     # 2. 散点图：自我激活 vs 社会影响（按身份着色）
     plt.subplot(2, 2, 2)
-    colors = ['#e41a1c' if iden == 1 else '#377eb8' for iden in sim.identities]
+    colors = ['#ff7f00' if iden == 1 else '#4daf4a' for iden in sim.identities]
     plt.scatter(self_activation, social_influence, c=colors, alpha=0.7)
     plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
     plt.axvline(x=0, color='k', linestyle='-', alpha=0.3)
@@ -42,8 +42,8 @@ def draw_activation_components(sim, title, filename):
     plt.grid(True, alpha=0.3)
     # 添加图例
     patches = [
-        Patch(color='#e41a1c', label='Identity: 1'),
-        Patch(color='#377eb8', label='Identity: -1')
+        Patch(color='#ff7f00', label='Identity: 1'),
+        Patch(color='#4daf4a', label='Identity: -1')
     ]
     plt.legend(handles=patches)
     

@@ -96,6 +96,11 @@ def run_single_simulation(output_dir="results/single_run", steps=300,
     draw_network(sim, "morality", "Initial Morality Network", 
                 os.path.join(output_dir, "initial_morality.png"))
     
+    # 添加综合网络图（身份+道德化+zealot状态）
+    if has_zealots or any(sim.morals == 1):
+        draw_network(sim, "identity_morality", "Initial Identity & Morality Network", 
+                    os.path.join(output_dir, "initial_identity_morality.png"))
+    
     # 运行模拟并记录轨迹
     print(f"⚡ 运行模拟 {steps} 步...")
     if has_zealots:
@@ -130,6 +135,11 @@ def run_single_simulation(output_dir="results/single_run", steps=300,
     draw_network(sim, "morality", "Final Morality Network", 
                 os.path.join(output_dir, "final_morality.png"))
     
+    # 添加最终综合网络图
+    if has_zealots or any(sim.morals == 1):
+        draw_network(sim, "identity_morality", "Identity & Morality Network", 
+                    os.path.join(output_dir, "identity_morality.png"))
+    
     # 打印统计摘要
     print("\n📋 统计摘要:")
     print("=" * 50)
@@ -154,8 +164,13 @@ def run_single_simulation(output_dir="results/single_run", steps=300,
     print("   - initial_*.png (初始网络)")
     print("   - opinion_evolution.png (意见演化热图)")
     print("   - final_*.png (最终网络)")
+    if has_zealots or any(sim.morals == 1):
+        print("   - *_identity_morality.png (综合网络：身份+道德化+Zealot)")
+    print("\n🎨 可视化规则:")
+    print("   - 形状：所有Agent都是圆形")
+    print("   - 边框：金色边框 = Zealot，黑色边框 = 道德化普通Agent，无边框 = 非道德化普通Agent")
     if has_zealots:
-        print("   📝 注意：网络图中Zealot会以金色边框突出显示")
+        print("   - 颜色：根据图表模式显示意见/身份/道德化状态")
     
     return sim
 
