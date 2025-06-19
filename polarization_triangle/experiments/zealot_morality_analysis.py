@@ -36,6 +36,63 @@ from polarization_triangle.analysis.statistics import (
 )
 
 
+# =====================================
+# 工具函数
+# =====================================
+
+def format_duration(duration: float) -> str:
+    """
+    格式化时间显示
+    
+    Args:
+    duration: 持续时间（秒）
+    
+    Returns:
+    str: 格式化的时间字符串
+    """
+    hours, remainder = divmod(duration, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+
+
+def save_batch_info(output_dir: str, batch_name: str, num_runs: int, 
+                   max_zealots: int = None, max_morality: int = None, 
+                   execution_time: float = 0, combinations_info: str = ""):
+    """
+    保存批次信息到文件
+    
+    Args:
+    output_dir: 输出目录
+    batch_name: 批次名称
+    num_runs: 运行次数
+    max_zealots: 最大zealot数量（可选）
+    max_morality: 最大morality比例（可选）
+    execution_time: 执行时间
+    combinations_info: 组合信息
+    """
+    data_dir = os.path.join(output_dir, "accumulated_data")
+    os.makedirs(data_dir, exist_ok=True)
+    
+    batch_info_file = os.path.join(data_dir, f"batch_info_{batch_name}.txt")
+    with open(batch_info_file, "w") as f:
+        f.write(f"Batch Information\n")
+        f.write(f"================\n\n")
+        f.write(f"Batch name: {batch_name}\n")
+        f.write(f"Number of runs: {num_runs}\n")
+        if max_zealots is not None:
+            f.write(f"Max zealots: {max_zealots}\n")
+        if max_morality is not None:
+            f.write(f"Max morality ratio: {max_morality}%\n")
+        f.write(f"Execution time: {format_duration(execution_time)}\n")
+        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if combinations_info:
+            f.write(f"\n{combinations_info}\n")
+
+
+# =====================================
+# 核心实验逻辑函数
+# =====================================
+
 def create_config_combinations():
     """
     创建参数组合
@@ -226,6 +283,10 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
     return results
 
 
+# =====================================
+# 数据管理函数
+# =====================================
+
 def save_data_incrementally(plot_type: str, x_values: List[float], 
                            all_results: Dict[str, Dict[str, List[List[float]]]], 
                            output_dir: str, batch_info: str = ""):
@@ -412,6 +473,157 @@ def process_accumulated_data_for_plotting(loaded_data: Dict[str, pd.DataFrame]) 
     return all_results, x_values, total_runs_per_combination
 
 
+# =====================================
+# 绘图相关函数
+# =====================================
+
+def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[str, Dict[str, Any]]:
+    """
+    为组合标签生成增强的样式配置，特别针对morality_ratios的10条线进行优化
+    
+    Args:
+    combo_labels: 组合标签列表
+    plot_type: 图表类型 ('zealot_numbers' 或 'morality_ratios')
+    
+    Returns:
+    dict: 样式配置字典
+    """
+    # 定义扩展的颜色调色板
+    colors = [
+        '#1f77b4',  # 蓝色
+        '#ff7f0e',  # 橙色  
+        '#2ca02c',  # 绿色
+        '#d62728',  # 红色
+        '#9467bd',  # 紫色
+        '#8c564b',  # 棕色
+        '#e377c2',  # 粉色
+        '#7f7f7f',  # 灰色
+        '#bcbd22',  # 橄榄色
+        '#17becf',  # 青色
+        '#aec7e8',  # 浅蓝色
+        '#ffbb78'   # 浅橙色
+    ]
+    
+    # 定义多种线型
+    linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 5)), (0, (3, 3)), (0, (1, 1))]
+    
+    # 定义多种标记
+    markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
+    
+    style_config = {}
+    
+    if plot_type == 'morality_ratios':
+        # 定义颜色映射：按zealot模式和ID-align分组
+        zealot_mode_colors = {
+            'None': {
+                'base': '#505050',      # 深灰色 (ID-cluster=True)
+                'light': '#c0c0c0'      # 浅灰色 (ID-cluster=False)
+            },
+            'Random': {
+                'base': '#ff4500',      # 深橙红色 (ID-align=True)
+                'light': '#ff8080'      # 浅粉红色 (ID-align=False)  
+            },
+            'Clustered': {
+                'base': '#0066cc',      # 深蓝色 (ID-align=True)
+                'light': '#00cc66'      # 亮绿色 (ID-align=False)
+            }
+        }
+        
+        # 定义标记映射：按ID-cluster分组
+        id_cluster_markers = {
+            'True': 'o',      # 圆形表示ID-cluster=True
+            'False': '^'      # 三角形表示ID-cluster=False
+        }
+        
+        # 定义标记大小映射：按ID-align分组
+        id_align_sizes = {
+            'True': 10,        # 大标记表示ID-align=True
+            'False': 5         # 小标记表示ID-align=False
+        }
+        
+        for label in combo_labels:
+            # 解析标签中的配置信息
+            if 'None' in label:
+                zealot_mode = 'None'
+                if 'ID-cluster True' in label:
+                    id_cluster = 'True'
+                    color = zealot_mode_colors[zealot_mode]['base']
+                    marker = id_cluster_markers[id_cluster]
+                    markersize = 8
+                else:
+                    id_cluster = 'False'
+                    color = zealot_mode_colors[zealot_mode]['light']
+                    marker = id_cluster_markers[id_cluster]
+                    markersize = 8
+                
+                style_config[label] = {
+                    'color': color,
+                    'linestyle': '-',
+                    'marker': marker,
+                    'markersize': markersize,
+                    'group': 'None'
+                }
+                
+            elif 'Random' in label:
+                zealot_mode = 'Random'
+                id_align = 'True' if 'ID-align True' in label else 'False'
+                id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                
+                color = zealot_mode_colors[zealot_mode]['base'] if id_align == 'True' else zealot_mode_colors[zealot_mode]['light']
+                marker = id_cluster_markers[id_cluster]
+                markersize = id_align_sizes[id_align]
+                
+                style_config[label] = {
+                    'color': color,
+                    'linestyle': '-',
+                    'marker': marker,
+                    'markersize': markersize,
+                    'group': 'Random'
+                }
+                
+            elif 'Clustered' in label:
+                zealot_mode = 'Clustered'
+                id_align = 'True' if 'ID-align True' in label else 'False'
+                id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                
+                color = zealot_mode_colors[zealot_mode]['base'] if id_align == 'True' else zealot_mode_colors[zealot_mode]['light']
+                marker = id_cluster_markers[id_cluster]
+                markersize = id_align_sizes[id_align]
+                
+                style_config[label] = {
+                    'color': color,
+                    'linestyle': '-',
+                    'marker': marker,
+                    'markersize': markersize,
+                    'group': 'Clustered'
+                }
+    else:
+        # 对于zealot_numbers，使用简单配置
+        for i, label in enumerate(combo_labels):
+            style_config[label] = {
+                'color': colors[i % len(colors)],
+                'linestyle': linestyles[i % len(linestyles)],
+                'marker': markers[i % len(markers)],
+                'markersize': 7,
+                'group': 'Default'
+            }
+    
+    return style_config
+
+
+def simplify_label(combo_label: str) -> str:
+    """
+    简化组合标签（当前保持原始标签以确保完整含义）
+    
+    Args:
+    combo_label: 原始组合标签
+    
+    Returns:
+    str: 简化后的标签
+    """
+    return combo_label
+
+
 def plot_accumulated_results(plot_type: str, x_values: List[float], 
                            all_results: Dict[str, Dict[str, List[List[float]]]], 
                            total_runs_per_combination: Dict[str, int],
@@ -452,163 +664,12 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     
     os.makedirs(plot_folders['mean'], exist_ok=True)
 
-    # 增强版样式配置函数（专门为morality_ratios优化）
-    def get_enhanced_style_config(combo_labels):
-        """
-        为组合标签生成增强的样式配置，特别针对morality_ratios的10条线进行优化
-        """
-        # 定义扩展的颜色调色板
-        colors = [
-            '#1f77b4',  # 蓝色
-            '#ff7f0e',  # 橙色  
-            '#2ca02c',  # 绿色
-            '#d62728',  # 红色
-            '#9467bd',  # 紫色
-            '#8c564b',  # 棕色
-            '#e377c2',  # 粉色
-            '#7f7f7f',  # 灰色
-            '#bcbd22',  # 橄榄色
-            '#17becf',  # 青色
-            '#aec7e8',  # 浅蓝色
-            '#ffbb78'   # 浅橙色
-        ]
-        
-        # 定义多种线型
-        linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 5)), (0, (3, 3)), (0, (1, 1))]
-        
-        # 定义多种标记
-        markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
-        
-        style_config = {}
-        
-        if plot_type == 'morality_ratios':
-            # 定义颜色映射：按zealot模式和ID-align分组
-            zealot_mode_colors = {
-                'None': {
-                    'base': '#505050',      # 深灰色 (ID-cluster=True)
-                    'light': '#c0c0c0'      # 浅灰色 (ID-cluster=False)
-                },
-                'Random': {
-                    'base': '#ff4500',      # 深橙红色 (ID-align=True)
-                    'light': '#ff8080'      # 浅粉红色 (ID-align=False)  
-                },
-                'Clustered': {
-                    'base': '#0066cc',      # 深蓝色 (ID-align=True)
-                    'light': '#00cc66'      # 亮绿色 (ID-align=False)
-                }
-            }
-            
-            # 定义标记映射：按ID-cluster分组
-            id_cluster_markers = {
-                'True': 'o',      # 圆形表示ID-cluster=True
-                'False': '^'      # 三角形表示ID-cluster=False (改为更明显的形状)
-            }
-            
-            # 定义标记大小映射：按ID-align分组
-            id_align_sizes = {
-                'True': 10,        # 大标记表示ID-align=True (增大差异)
-                'False': 5         # 小标记表示ID-align=False
-            }
-            
-            # 添加调试信息
-            print(f"\n📝 Style Configuration for {plot_type}: {len(combo_labels)} combinations")
-            
-            for label in combo_labels:
-                # 解析标签中的配置信息
-                if 'None' in label:
-                    zealot_mode = 'None'
-                    # 从标签中提取ID-cluster值 (格式: "None  ID-cluster True/False")
-                    if 'ID-cluster True' in label:
-                        id_cluster = 'True'
-                        color = zealot_mode_colors[zealot_mode]['base']  # 深灰色
-                        marker = id_cluster_markers[id_cluster]  # 圆形
-                        markersize = 8  # None组统一标记大小
-                    else:  # ID-cluster False
-                        id_cluster = 'False'
-                        color = zealot_mode_colors[zealot_mode]['light']  # 浅灰色
-                        marker = id_cluster_markers[id_cluster]  # 三角形
-                        markersize = 8
-                    
-                    style_config[label] = {
-                        'color': color,
-                        'linestyle': '-',  # 统一使用实线
-                        'marker': marker,
-                        'markersize': markersize,
-                        'group': 'None'
-                    }
-                    
-                elif 'Random' in label:
-                    zealot_mode = 'Random'
-                    # 从标签中提取ID-align和ID-cluster值 (格式: "Random  ID-align True/False  ID-cluster True/False")
-                    id_align = 'True' if 'ID-align True' in label else 'False'
-                    id_cluster = 'True' if 'ID-cluster True' in label else 'False'
-                    
-                    # 根据ID-align选择颜色
-                    if id_align == 'True':
-                        color = zealot_mode_colors[zealot_mode]['base']  # 深橙红色
-                    else:
-                        color = zealot_mode_colors[zealot_mode]['light']  # 浅粉红色
-                    
-                    # 根据ID-cluster选择标记
-                    marker = id_cluster_markers[id_cluster]
-                    # 根据ID-align选择大小
-                    markersize = id_align_sizes[id_align]
-                    
-                    style_config[label] = {
-                        'color': color,
-                        'linestyle': '-',  # 统一使用实线
-                        'marker': marker,
-                        'markersize': markersize,
-                        'group': 'Random'
-                    }
-                    
-                elif 'Clustered' in label:
-                    zealot_mode = 'Clustered'
-                    # 从标签中提取ID-align和ID-cluster值 (格式: "Clustered  ID-align True/False  ID-cluster True/False")
-                    id_align = 'True' if 'ID-align True' in label else 'False'
-                    id_cluster = 'True' if 'ID-cluster True' in label else 'False'
-                    
-                    # 根据ID-align选择颜色
-                    if id_align == 'True':
-                        color = zealot_mode_colors[zealot_mode]['base']  # 深蓝色
-                    else:
-                        color = zealot_mode_colors[zealot_mode]['light']  # 亮绿色
-                    
-                    # 根据ID-cluster选择标记
-                    marker = id_cluster_markers[id_cluster]
-                    # 根据ID-align选择大小
-                    markersize = id_align_sizes[id_align]
-                    
-                    style_config[label] = {
-                        'color': color,
-                        'linestyle': '-',  # 统一使用实线
-                        'marker': marker,
-                        'markersize': markersize,
-                        'group': 'Clustered'
-                    }
-            
-            print(f"✅ Style configuration completed successfully") # 简化的成功信息
-        else:
-            # 对于zealot_numbers，使用简单配置
-            for i, label in enumerate(combo_labels):
-                style_config[label] = {
-                    'color': colors[i % len(colors)],
-                    'linestyle': linestyles[i % len(linestyles)],
-                    'marker': markers[i % len(markers)],
-                    'markersize': 7,
-                    'group': 'Default'
-                }
-        
-        return style_config
-
-    # 保持完整标签函数
-    def simplify_label(combo_label):
-        """保持原始标签，不进行简化以确保读者能理解完整含义"""
-        return combo_label
-    
     # 获取样式配置
     combo_labels = list(all_results.keys())
-    style_config = get_enhanced_style_config(combo_labels)
+    style_config = get_enhanced_style_config(combo_labels, plot_type)
+    
+    print(f"\n📝 Style Configuration for {plot_type}: {len(combo_labels)} combinations")
+    print(f"✅ Style configuration completed successfully")
     
     # 为每个指标生成高质量的 mean plots
     for metric in metrics:
@@ -678,6 +739,10 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     print(f"     - Mean line plots: {plot_folders['mean']}")
 
 
+# =====================================
+# 高级接口函数
+# =====================================
+
 def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis", 
                            num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30,
                            batch_name: str = ""):
@@ -719,7 +784,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     plot1_start_time = time.time()
     
-    zealot_x_values = list(range(0, max_zealots + 1, 2))  # 0, 2, 4, ..., 50
+    zealot_x_values = list(range(0, max_zealots + 1, 1))  # 0, 1, 2, ..., n
     zealot_results = {}
     
     for combo in combinations['zealot_numbers']:
@@ -735,7 +800,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     hours1, remainder1 = divmod(plot1_duration, 3600)
     minutes1, seconds1 = divmod(remainder1, 60)
     
-    print(f"⏱️  Test Type 1 completed in: {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
+    print(f"⏱️  Test Type 1 completed in: {format_duration(plot1_duration)}")
     print()
     
     # === 处理图2：x轴为morality ratio ===
@@ -744,7 +809,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     plot2_start_time = time.time()
     
-    morality_x_values = list(range(0, max_morality + 1, 2))  # 0, 2, 4, ..., 30
+    morality_x_values = list(range(0, max_morality + 1, 1))  # 0, 1, 2, ..., n
     morality_results = {}
     
     for combo in combinations['morality_ratios']:
@@ -760,7 +825,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     hours2, remainder2 = divmod(plot2_duration, 3600)
     minutes2, seconds2 = divmod(remainder2, 60)
     
-    print(f"⏱️  Test Type 2 completed in: {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
+    print(f"⏱️  Test Type 2 completed in: {format_duration(plot2_duration)}")
     print()
     
     # 计算总耗时
@@ -774,22 +839,13 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
     print()
     print("⏱️  Timing Summary:")
-    print(f"   Test Type 1 (Zealot Numbers): {int(hours1)}h {int(minutes1)}m {seconds1:.2f}s")
-    print(f"   Test Type 2 (Morality Ratios): {int(hours2)}h {int(minutes2)}m {seconds2:.2f}s")
-    print(f"   Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    print(f"   Test Type 1 (Zealot Numbers): {format_duration(plot1_duration)}")
+    print(f"   Test Type 2 (Morality Ratios): {format_duration(plot2_duration)}")
+    print(f"   Total execution time: {format_duration(elapsed_time)}")
     print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
     
     # 保存批次信息
-    batch_info_file = os.path.join(output_dir, "accumulated_data", f"batch_info_{batch_name}.txt")
-    with open(batch_info_file, "w") as f:
-        f.write(f"Batch Information\n")
-        f.write(f"================\n\n")
-        f.write(f"Batch name: {batch_name}\n")
-        f.write(f"Number of runs: {num_runs}\n")
-        f.write(f"Max zealots: {max_zealots}\n")
-        f.write(f"Max morality ratio: {max_morality}%\n")
-        f.write(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
-        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    save_batch_info(output_dir, batch_name, num_runs, max_zealots, max_morality, elapsed_time)
 
 
 def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis"):
@@ -928,79 +984,16 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     print("\n" + "=" * 70)
     print("🎉 No Zealot Data Collection Completed Successfully!")
     print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
-    print(f"⏱️  Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    print(f"⏱️  Total execution time: {format_duration(elapsed_time)}")
     print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
     
+    # 构建组合信息
+    combinations_info = f"Number of combinations: {len(no_zealot_combinations)}\nCombinations run:\n"
+    for combo in no_zealot_combinations:
+        combinations_info += f"  - {combo['label']}\n"
+    
     # 保存批次信息
-    batch_info_file = os.path.join(output_dir, "accumulated_data", f"batch_info_{batch_name}.txt")
-    with open(batch_info_file, "w") as f:
-        f.write(f"No Zealot Batch Information\n")
-        f.write(f"===========================\n\n")
-        f.write(f"Batch name: {batch_name}\n")
-        f.write(f"Number of runs: {num_runs}\n")
-        f.write(f"Max morality ratio: {max_morality}%\n")
-        f.write(f"Number of combinations: {len(no_zealot_combinations)}\n")
-        f.write(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
-        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"\nCombinations run:\n")
-        for combo in no_zealot_combinations:
-            f.write(f"  - {combo['label']}\n")
-
-
-def run_complete_no_zealot_analysis(output_dir: str = "results/zealot_morality_analysis", 
-                                  num_runs: int = 5, max_morality: int = 30):
-    """
-    运行完整的 no zealot 分析：数据收集 + 图表生成
-    
-    Args:
-    output_dir: 输出目录
-    num_runs: 每个参数点的运行次数
-    max_morality: 最大 morality ratio (%)
-    """
-    print("🔬 Starting Complete No Zealot Analysis")
-    print("=" * 70)
-    
-    # 第一步：运行 no zealot 数据收集
-    run_no_zealot_morality_data(output_dir, num_runs, max_morality)
-    
-    # 第二步：从累积数据生成图表
-    plot_from_accumulated_data(output_dir)
-
-
-def test_combinations():
-    """
-    测试函数：显示所有参数组合，验证 none zealot 的组合是否正确
-    """
-    combinations = create_config_combinations()
-    
-    print("📊 参数组合测试结果:")
-    print("=" * 50)
-    
-    print(f"图1 (Zealot Numbers) 组合数: {len(combinations['zealot_numbers'])}")
-    for i, combo in enumerate(combinations['zealot_numbers']):
-        print(f"  {i+1}. {combo['label']}")
-    
-    print(f"\n图2 (Morality Ratios) 组合数: {len(combinations['morality_ratios'])}")
-    
-    # 按 zealot_mode 分组显示
-    none_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'none']
-    random_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'random']
-    clustered_combos = [c for c in combinations['morality_ratios'] if c['zealot_mode'] == 'clustered']
-    
-    print(f"\n  None Zealot 组合数: {len(none_combos)}")
-    for i, combo in enumerate(none_combos):
-        print(f"    {i+1}. {combo['label']}")
-    
-    print(f"\n  Random Zealot 组合数: {len(random_combos)}")
-    for i, combo in enumerate(random_combos):
-        print(f"    {i+1}. {combo['label']}")
-    
-    print(f"\n  Clustered Zealot 组合数: {len(clustered_combos)}")
-    for i, combo in enumerate(clustered_combos):
-        print(f"    {i+1}. {combo['label']}")
-    
-    print(f"\n总计 Morality Ratios 组合: {len(combinations['morality_ratios'])}")
-    print("预期组合数: 2 (none) + 4 (random) + 4 (clustered) = 10")
+    save_batch_info(output_dir, batch_name, num_runs, None, max_morality, elapsed_time, combinations_info)
 
 
 if __name__ == "__main__":
@@ -1009,26 +1002,26 @@ if __name__ == "__main__":
     # 开始计时
     main_start_time = time.time()
     
-    # # 方法1：分两步运行
-    # # 第一步：运行测试并积累数据（可以多次运行以积累更多数据）
-    # print("=" * 50)
-    # print("🚀 示例：分步骤运行实验")
-    # print("=" * 50)
+    # 方法1：分两步运行
+    # 第一步：运行测试并积累数据（可以多次运行以积累更多数据）
+    print("=" * 50)
+    print("🚀 示例：分步骤运行实验")
+    print("=" * 50)
     
-    # # 数据收集阶段
-    # data_collection_start_time = time.time()
+    # 数据收集阶段
+    data_collection_start_time = time.time()
     
-    # # 可以多次运行以下命令来积累数据：
-    # run_and_accumulate_data(
-    #     output_dir="results/zealot_morality_analysis",
-    #     num_runs=99,  # 每次运行100轮测试
-    #     max_zealots=100,  
-    #     max_morality=100,
-    #     # batch_name="batch_001"  # 可选：给批次命名
-    # )
+    # 可以多次运行以下命令来积累数据：
+    run_and_accumulate_data(
+        output_dir="results/zealot_morality_analysis",
+        num_runs=3,  # 每次运行100轮测试
+        max_zealots=3,  
+        max_morality=3,
+        # batch_name="batch_001"  # 可选：给批次命名
+    )
     
-    # data_collection_end_time = time.time()
-    # data_collection_duration = data_collection_end_time - data_collection_start_time
+    data_collection_end_time = time.time()
+    data_collection_duration = data_collection_end_time - data_collection_start_time
     
 
     # 第二步：绘图阶段
@@ -1043,12 +1036,6 @@ if __name__ == "__main__":
     # 计算总耗时
     main_end_time = time.time()
     total_duration = main_end_time - main_start_time
-    
-    # 格式化耗时显示
-    def format_duration(duration):
-        hours, remainder = divmod(duration, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
     
     # 显示耗时总结
     print("\n" + "🕒" * 50)

@@ -1,0 +1,24 @@
+我需要你检查和分析@zealot_morality_analysis.py这个代码文件
+
+这个代码的任务是这样的：
+它有两个实验要执行，一个实验是组合这些参数：{zealot的分布（cluster或random）、zealot的identity是否固定为1、identity的分布（cluster或random）}，外加2个没有zealot的参数组合，共计10个组合（因此会是10条线），x轴为morality ratio，范围[0,100]。
+另一个实验是组合这些参数：{zealot的分布（cluster或random）、morality的高低(0.0或0.3)}，共计4个组合（因此会是四条线），x轴为zealot number。
+
+然后对于每个实验它们都是进行一定步数后求出4个指标Mean opinion、Variance、Identity opinion difference (between identity groups)、Polarization index。从而将求出的指标作为数据点，绘制出2*4=8张图（2个实验，每个实验4个指标）。
+
+它理应的结构大概是这样：
+实验部分
+先分别获取实验1和实验2的这些参数的组合。
+然后在实验1：对于morality ratio在[0,100]的范围内取一定点，结合起上面的参数组合初始化一个sim。让sim运行指定步数后，用这个sim的数据计算出4个指标，（以追加的方式）存进文件数据里。
+在实验2也类似：对于zealot number在[0,100]的范围内取一定点，结合起上面的参数组合初始化一个sim。让sim运行指定步数后，用这个sim的数据计算出4个指标，（以追加的方式）存进文件数据里。
+
+
+绘图部分：
+读取文件数据，构建出实验1和实验2得出的数据。
+分别对于实验1和实验2，用这些数据绘制出8张图
+
+
+
+@zealot_morality_analysis.py这个代码文件的代码符合这个逻辑和流程吗？以让项目代码更清晰、更友好、更不臃肿为目标的话，有什么优化的思路呢？
+
+注意，如果你要测试的话请务必记住，模拟本身跑起来有点慢，所以你不要选取太多数据点（我是指类似从morality ratio在[0,100]范围内不要选上50或100个点，只选几个），以及run的数量不要太高
