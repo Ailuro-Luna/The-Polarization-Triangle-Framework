@@ -6,13 +6,16 @@ It generates two types of plots:
 1. X-axis: Number of zealots
 2. X-axis: Morality ratio
 
-For each plot type, it generates 4 different Y-axis metrics:
+For each plot type, it generates 7 different Y-axis metrics:
 - Mean opinion
 - Variance 
 - Identity opinion difference (between identity groups)
 - Polarization index
+- Variance per identity (+1) - variance within identity group +1
+- Variance per identity (-1) - variance within identity group -1
+- Variance per identity (combined) - both identity groups on same plot
 
-Total: 8 plots (2 types × 4 metrics)
+Total: 14 plots (2 types × 7 metrics)
 """
 
 import numpy as np
@@ -157,22 +160,26 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
     """
     运行单次模拟并获取最终状态的统计指标
     
-    该函数创建一个模拟实例，运行指定步数，然后计算四个关键指标：
+    该函数创建一个模拟实例，运行指定步数，然后计算六个关键指标：
     - Mean Opinion: 系统中非zealot agent的平均意见值
     - Variance: 意见分布的方差，衡量意见分化程度
     - Identity Opinion Difference: 不同身份群体间的平均意见差异
     - Polarization Index: 极化指数，衡量系统的极化程度
+    - Variance per Identity: 每个身份群体内部的意见方差（两个身份群体分别计算）
     
     Args:
         config (SimulationConfig): 模拟配置对象，包含网络、agent、zealot等参数
         steps (int, optional): 模拟运行的步数. Defaults to 500.
     
     Returns:
-        Dict[str, float]: 包含四个统计指标的字典
-            - 'mean_opinion': 平均意见值
-            - 'variance': 意见方差
-            - 'identity_opinion_difference': 身份间意见差异
-            - 'polarization_index': 极化指数
+        Dict[str, Any]: 包含统计指标的字典
+            - 'mean_opinion': 平均意见值 (float)
+            - 'variance': 意见方差 (float)
+            - 'identity_opinion_difference': 身份间意见差异 (float)
+            - 'polarization_index': 极化指数 (float)
+            - 'variance_per_identity': 每个身份组的方差 (dict)
+                - 'identity_1': identity=1组的方差
+                - 'identity_-1': identity=-1组的方差
     
     Raises:
         Exception: 当模拟过程中出现错误时抛出异常
@@ -199,11 +206,34 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
         print("Warning: identity_difference not found, this should not happen under normal conditions")
         identity_opinion_difference = 0.0
     
+    # 计算 variance per identity (每个身份组内的方差)
+    variance_per_identity = {'identity_1': 0.0, 'identity_-1': 0.0}
+    
+    # 获取非zealot节点的意见和身份
+    # 创建 zealot mask：如果一个agent的ID在 zealot_ids 中，则为True
+    zealot_mask = np.zeros(sim.num_agents, dtype=bool)
+    if sim.enable_zealots and sim.zealot_ids:
+        zealot_mask[sim.zealot_ids] = True
+    
+    non_zealot_mask = ~zealot_mask
+    non_zealot_opinions = sim.opinions[non_zealot_mask]
+    non_zealot_identities = sim.identities[non_zealot_mask]
+    
+    # 分别计算每个身份组的方差
+    for identity_val in [1, -1]:
+        identity_mask = non_zealot_identities == identity_val
+        if np.sum(identity_mask) > 1:  # 至少需要2个节点才能计算方差
+            identity_opinions = non_zealot_opinions[identity_mask]
+            variance_per_identity[f'identity_{identity_val}'] = float(np.var(identity_opinions))
+        else:
+            variance_per_identity[f'identity_{identity_val}'] = 0.0
+    
     return {
         'mean_opinion': mean_stats['mean_opinion'],
         'variance': variance_stats['overall_variance'],
         'identity_opinion_difference': identity_opinion_difference,
-        'polarization_index': polarization
+        'polarization_index': polarization,
+        'variance_per_identity': variance_per_identity
     }
 
 
@@ -241,12 +271,16 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
             - 'variance': 意见方差的多次运行结果  
             - 'identity_opinion_difference': 身份间意见差异的多次运行结果
             - 'polarization_index': 极化指数的多次运行结果
+            - 'variance_per_identity_1': identity=1组内方差的多次运行结果
+            - 'variance_per_identity_-1': identity=-1组内方差的多次运行结果
     """
     results = {
         'mean_opinion': [],
         'variance': [],
         'identity_opinion_difference': [],
-        'polarization_index': []
+        'polarization_index': [],
+        'variance_per_identity_1': [],
+        'variance_per_identity_-1': []
     }
     
     base_config = copy.deepcopy(high_polarization_config)
@@ -273,7 +307,9 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
             'mean_opinion': [],
             'variance': [],
             'identity_opinion_difference': [],
-            'polarization_index': []
+            'polarization_index': [],
+            'variance_per_identity_1': [],
+            'variance_per_identity_-1': []
         }
         
         # 设置当前x值对应的参数
@@ -290,8 +326,13 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
         for run in range(num_runs):
             try:
                 stats = run_single_simulation(current_config)
-                for metric in runs_data.keys():
+                # 处理基础指标
+                for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
                     runs_data[metric].append(stats[metric])
+                # 处理 variance per identity 指标
+                variance_per_identity = stats['variance_per_identity']
+                runs_data['variance_per_identity_1'].append(variance_per_identity['identity_1'])
+                runs_data['variance_per_identity_-1'].append(variance_per_identity['identity_-1'])
             except Exception as e:
                 print(f"Warning: Simulation failed for x={x_val}, run={run}: {e}")
                 # 使用NaN填充失败的运行
@@ -475,6 +516,109 @@ def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[s
     return style_config
 
 
+def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict[str, Any]:
+    """
+    为 variance per identity 图表生成特殊的样式配置
+    
+    Args:
+        identity_label: 带身份标识的标签，如 "Random, ID-align=True (ID=1)"
+        plot_type: 图表类型
+    
+    Returns:
+        dict: 样式配置
+    """
+    # 扩展颜色调色板以支持更多线条
+    colors = [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
+        '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78',
+        '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d',
+        '#9edae5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+    ]
+    
+    # 线型组合：实线用于 ID=1，虚线用于 ID=-1
+    linestyles = {
+        '1': '-',      # 实线用于 identity=1
+        '-1': '--'     # 虚线用于 identity=-1
+    }
+    
+    # 标记形状：圆形用于 ID=1，方形用于 ID=-1
+    markers = {
+        '1': 'o',      # 圆形用于 identity=1
+        '-1': 's'      # 方形用于 identity=-1
+    }
+    
+    # 提取身份值
+    identity_val = identity_label.split('(ID=')[-1].rstrip(')')
+    
+    # 提取原始组合标签
+    base_label = identity_label.split(' (ID=')[0]
+    
+    # 计算颜色索引（基于原始组合标签的哈希值）
+    color_index = abs(hash(base_label)) % len(colors)
+    
+    # 为 ID=-1 使用稍微不同的颜色（调整亮度）
+    if identity_val == '-1':
+        color_index = (color_index + len(colors) // 2) % len(colors)
+    
+    return {
+        'color': colors[color_index],
+        'linestyle': linestyles.get(identity_val, '-'),
+        'marker': markers.get(identity_val, 'o'),
+        'markersize': 8 if identity_val == '1' else 6,  # ID=1 稍大的标记
+        'group': f'identity_{identity_val}'
+    }
+
+
+def get_combined_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict[str, Any]:
+    """
+    为合并的 variance per identity 图表生成样式配置
+    
+    相同配置的两条线使用相同颜色和标记，但用实线/虚线区分身份组
+    
+    Args:
+        identity_label: 带身份标识的标签，如 "Random, ID-align=True (ID=+1)"
+        plot_type: 图表类型
+    
+    Returns:
+        dict: 样式配置
+    """
+    # 扩展颜色调色板
+    colors = [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
+        '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78',
+        '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d',
+        '#9edae5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+    ]
+    
+    # 提取身份值（+1 或 -1）
+    identity_val = identity_label.split('(ID=')[-1].rstrip(')')
+    
+    # 提取原始组合标签
+    base_label = identity_label.split(' (ID=')[0]
+    
+    # 基于原始组合标签计算颜色索引（确保相同配置使用相同颜色）
+    color_index = abs(hash(base_label)) % len(colors)
+    
+    # 线型：+1 用实线，-1 用虚线
+    linestyle = '-' if identity_val == '+1' else '--'
+    
+    # 标记：相同配置使用相同标记
+    markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
+    marker_index = abs(hash(base_label)) % len(markers)
+    marker = markers[marker_index]
+    
+    # 标记大小：+1 稍大，-1 稍小
+    markersize = 8 if identity_val == '+1' else 6
+    
+    return {
+        'color': colors[color_index],
+        'linestyle': linestyle,
+        'marker': marker,
+        'markersize': markersize,
+        'group': f'combined_identity_{identity_val}'
+    }
+
+
 def simplify_label(combo_label: str) -> str:
     """
     简化组合标签（当前保持原始标签以确保完整含义）
@@ -505,12 +649,16 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         return
     
     output_dir = str(data_manager.base_dir)
-    metrics = ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']
+    metrics = ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index', 
+               'variance_per_identity_1', 'variance_per_identity_-1', 'variance_per_identity_combined']
     metric_labels = {
         'mean_opinion': 'Mean Opinion',
         'variance': 'Opinion Variance',
         'identity_opinion_difference': 'Identity Opinion Difference',
-        'polarization_index': 'Polarization Index'
+        'polarization_index': 'Polarization Index',
+        'variance_per_identity_1': 'Variance per Identity (+1)',
+        'variance_per_identity_-1': 'Variance per Identity (-1)',
+        'variance_per_identity_combined': 'Variance per Identity (Both Groups)'
     }
     
     x_label = 'Number of Zealots' if plot_type == 'zealot_numbers' else 'Morality Ratio (%)'
@@ -545,32 +693,112 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         # 预处理数据：计算均值
         processed_data = {}
         
-        for combo_label, results in all_results.items():
-            metric_data = results[metric]
-            means = []
+        if metric == 'variance_per_identity_combined':
+            # 对于合并的 variance per identity 图表，为每个组合创建两条线
+            for combo_label, results in all_results.items():
+                # 处理 identity=1 的数据
+                metric_data_1 = results['variance_per_identity_1']
+                means_1 = []
+                for i, x_runs in enumerate(metric_data_1):
+                    valid_runs = [val for val in x_runs if not np.isnan(val)]
+                    if valid_runs:
+                        means_1.append(np.mean(valid_runs))
+                    else:
+                        means_1.append(np.nan)
+                
+                # 处理 identity=-1 的数据
+                metric_data_neg1 = results['variance_per_identity_-1']
+                means_neg1 = []
+                for i, x_runs in enumerate(metric_data_neg1):
+                    valid_runs = [val for val in x_runs if not np.isnan(val)]
+                    if valid_runs:
+                        means_neg1.append(np.mean(valid_runs))
+                    else:
+                        means_neg1.append(np.nan)
+                
+                # 创建两条线的数据
+                processed_data[f"{combo_label} (ID=+1)"] = {
+                    'means': np.array(means_1),
+                    'identity': '+1',
+                    'base_combo': combo_label
+                }
+                processed_data[f"{combo_label} (ID=-1)"] = {
+                    'means': np.array(means_neg1),
+                    'identity': '-1',
+                    'base_combo': combo_label
+                }
+        elif metric.startswith('variance_per_identity') and metric != 'variance_per_identity_combined':
+            # 对于单独的 variance per identity 指标，每个组合标签会被拆分为两条线
+            identity_suffix = metric.split('_')[-1]  # '1' or '-1'
             
-            for i, x_runs in enumerate(metric_data):
-                valid_runs = [val for val in x_runs if not np.isnan(val)]
-                if valid_runs:
-                    means.append(np.mean(valid_runs))
-                else:
-                    means.append(np.nan)
-            
-            processed_data[combo_label] = {
-                'means': np.array(means)
-            }
+            for combo_label, results in all_results.items():
+                metric_data = results[metric]
+                means = []
+                
+                for i, x_runs in enumerate(metric_data):
+                    valid_runs = [val for val in x_runs if not np.isnan(val)]
+                    if valid_runs:
+                        means.append(np.mean(valid_runs))
+                    else:
+                        means.append(np.nan)
+                
+                # 为 variance per identity 创建带身份标识的标签
+                identity_label = f"{combo_label} (ID={identity_suffix})"
+                processed_data[identity_label] = {
+                    'means': np.array(means)
+                }
+        else:
+            # 对于其他指标，保持原有处理方式
+            for combo_label, results in all_results.items():
+                metric_data = results[metric]
+                means = []
+                
+                for i, x_runs in enumerate(metric_data):
+                    valid_runs = [val for val in x_runs if not np.isnan(val)]
+                    if valid_runs:
+                        means.append(np.mean(valid_runs))
+                    else:
+                        means.append(np.nan)
+                
+                processed_data[combo_label] = {
+                    'means': np.array(means)
+                }
         
         # 添加运行次数信息到标题（显示总run数）
         title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
         
         # 高质量均值曲线图
-        plt.figure(figsize=(20, 12) if plot_type == 'morality_ratios' else (18, 10))
-        for combo_label, data in processed_data.items():
-            runs_info = total_runs_per_combination.get(combo_label, 0)
-            short_label = simplify_label(combo_label)
+        # 对于 variance per identity，使用更大的图表以容纳更多线条
+        if metric.startswith('variance_per_identity'):
+            plt.figure(figsize=(24, 14) if plot_type == 'morality_ratios' else (20, 12))
+        else:
+            plt.figure(figsize=(20, 12) if plot_type == 'morality_ratios' else (18, 10))
+            
+        for display_label, data in processed_data.items():
+            # 对于 variance per identity，需要从显示标签中提取原始组合标签来获取runs信息
+            if metric.startswith('variance_per_identity'):
+                # 从 "Original Label (ID=1)" 中提取 "Original Label"
+                if metric == 'variance_per_identity_combined':
+                    # 对于合并图表，使用 base_combo 字段
+                    original_combo_label = data.get('base_combo', display_label.split(' (ID=')[0])
+                else:
+                    original_combo_label = display_label.split(' (ID=')[0]
+                runs_info = total_runs_per_combination.get(original_combo_label, 0)
+            else:
+                original_combo_label = display_label
+                runs_info = total_runs_per_combination.get(display_label, 0)
+            
+            short_label = simplify_label(display_label)
             label_with_runs = f"{short_label} (n={runs_info})"
             
-            style = style_config.get(combo_label, {})
+            # 为不同类型的 variance per identity 图表选择合适的样式配置函数
+            if metric == 'variance_per_identity_combined':
+                style = get_combined_variance_per_identity_style(display_label, plot_type)
+            elif metric.startswith('variance_per_identity'):
+                style = get_variance_per_identity_style(display_label, plot_type)
+            else:
+                style = style_config.get(display_label, {})
+            
             plt.plot(x_values, data['means'], label=label_with_runs, 
                     color=style.get('color', 'blue'),
                     linestyle=style.get('linestyle', '-'),
@@ -582,11 +810,32 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         plt.ylabel(metric_labels[metric], fontsize=16)
         plt.title(f'{metric_labels[metric]} vs {x_label}{title_suffix}', fontsize=18, fontweight='bold')
         
-        if plot_type == 'morality_ratios':
-            plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, 
-                      fontsize=12, frameon=True, fancybox=True, shadow=True)
+        # 根据指标类型和线条数量调整图例布局
+        if metric == 'variance_per_identity_combined':
+            # 合并的 variance per identity 图表：每个组合2条线
+            if plot_type == 'morality_ratios':
+                # 20条线，使用4列
+                plt.legend(bbox_to_anchor=(0.5, -0.20), loc='upper center', ncol=4, 
+                          fontsize=10, frameon=True, fancybox=True, shadow=True)
+            else:
+                # 8条线，使用3列
+                plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, fontsize=11)
+        elif metric.startswith('variance_per_identity'):
+            # 单独的 variance per identity 图表有更多线条，需要更多列和更小字体
+            if plot_type == 'morality_ratios':
+                # 20条线，使用4列
+                plt.legend(bbox_to_anchor=(0.5, -0.20), loc='upper center', ncol=4, 
+                          fontsize=10, frameon=True, fancybox=True, shadow=True)
+            else:
+                # 8条线，使用3列
+                plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, fontsize=11)
         else:
-            plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize=12)
+            # 其他指标保持原有布局
+            if plot_type == 'morality_ratios':
+                plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, 
+                          fontsize=12, frameon=True, fancybox=True, shadow=True)
+            else:
+                plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize=12)
         
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
