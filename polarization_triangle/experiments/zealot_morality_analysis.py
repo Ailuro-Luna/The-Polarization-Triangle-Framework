@@ -95,68 +95,86 @@ def save_batch_info(output_dir: str, batch_name: str, num_runs: int,
 
 def create_config_combinations():
     """
-    创建参数组合
+    创建实验参数组合配置
+    
+    该函数生成两类实验的所有参数组合：
+    
+    1. zealot_numbers实验：测试不同zealot数量对系统的影响
+       - 变量：zealot数量 (x轴)
+       - 固定：zealot身份分配=True, 身份分布=random
+       - 比较：zealot分布模式(random/clustered) × morality比例(0.0/0.3) = 4个组合
+    
+    2. morality_ratios实验：测试不同morality比例对系统的影响
+       - 变量：morality比例 (x轴)
+       - 固定：zealot数量=20
+       - 比较：zealot模式(random/clustered/none) × zealot身份对齐(True/False) × 
+               身份分布(random/clustered) = 10个组合
     
     Returns:
-    dict: 包含两类图的参数组合
+        dict: 包含两类实验配置的字典
+            - 'zealot_numbers': 4个参数组合，用于zealot数量实验
+            - 'morality_ratios': 10个参数组合，用于morality比例实验
     """
-    # 基础配置
+    # 基础配置：使用高极化配置作为模板
     base_config = copy.deepcopy(high_polarization_config)
-    base_config.steps = 300  # 设置运行步数
+    base_config.steps = 300  # 每次模拟运行300步
     
+    # 初始化两类实验的参数组合容器
     combinations = {
-        'zealot_numbers': [],  # 图1：x轴为zealot numbers
-        'morality_ratios': []  # 图2：x轴为morality ratio
+        'zealot_numbers': [],   # 实验1：x轴为zealot数量的参数组合
+        'morality_ratios': []   # 实验2：x轴为morality比例的参数组合
     }
     
-    # 图1：x轴为zealot numbers的组合
-    # 比较 "clustering zealots or not" 和 morality ratio
-    zealot_clustering_options = ['random', 'clustered']
-    morality_ratios_for_zealot_plot = [0.0, 0.3]  # 两个不同的morality ratio进行比较
+    # ===== 实验1：zealot数量扫描实验 =====
+    # 比较zealot分布模式和morality比例对系统的影响
+    # 固定参数：zealot身份分配=True, 身份分布=random
+    zealot_clustering_options = ['random', 'clustered']  # zealot分布模式：随机分布 vs 聚集分布
+    morality_ratios_for_zealot_plot = [0.0, 0.3]  # 两个morality水平：无道德约束 vs 中等道德约束
     
     for clustering in zealot_clustering_options:
         for morality_ratio in morality_ratios_for_zealot_plot:
             combo = {
-                'zealot_mode': clustering,
-                'morality_rate': morality_ratio,
-                'zealot_identity_allocation': True,  # 固定为True
-                'cluster_identity': False,  # 固定为random identity distribution
+                'zealot_mode': clustering,                    # zealot分布模式
+                'morality_rate': morality_ratio,              # morality约束强度
+                'zealot_identity_allocation': True,           # zealot按身份分配（固定）
+                'cluster_identity': False,                    # 身份随机分布（固定）
                 'label': f'{clustering.capitalize()} Zealots, Morality={morality_ratio}',
                 'steps': base_config.steps
             }
             combinations['zealot_numbers'].append(combo)
     
-    # 图2：x轴为morality ratio的组合
-    # 比较 "clustering zealots or not", "zealots aligned with identity", "identity distribution"
-    zealot_modes = ['random', 'clustered', 'none']
-    zealot_identity_alignments = [True, False]  # zealots aligned with identity
-    identity_distributions = [False, True]  # random vs clustered identity distribution
+    # ===== 实验2：morality比例扫描实验 =====
+    # 比较三个关键因素的交互影响：zealot分布、zealot身份对齐、身份分布
+    # 固定参数：zealot数量=20（中等水平）
+    zealot_modes = ['random', 'clustered', 'none']     # zealot模式：随机/聚集/无zealot
+    zealot_identity_alignments = [True, False]         # zealot是否按身份分配
+    identity_distributions = [False, True]             # 身份分布：随机 vs 聚集
     
-    # 固定zealot数量为20（中等数量）
+    # 固定zealot数量为20，这是一个中等水平，既不会过度影响系统，也能观察到效果
     fixed_zealot_count = 20
     
     for zealot_mode in zealot_modes:
         if zealot_mode == 'none':
-            # 对于 none zealot，ID-align 参数没有意义，只区分 identity distribution
+            # 无zealot情况：只需要区分身份分布方式，zealot相关参数无意义
             for identity_dist in identity_distributions:
                 combo = {
-                    'zealot_count': 0,
-                    'zealot_mode': zealot_mode,
-                    'zealot_identity_allocation': True,  # 设为默认值，但不影响结果
-                    'cluster_identity': identity_dist,
+                    'zealot_count': 0,                           # 无zealot
+                    'zealot_mode': zealot_mode,                  # 标记为'none'
+                    'zealot_identity_allocation': True,          # 默认值（不影响结果）
+                    'cluster_identity': identity_dist,           # 身份分布方式
                     'label': f'{zealot_mode.capitalize()}, ID-cluster={identity_dist}',
                     'steps': base_config.steps
                 }
                 combinations['morality_ratios'].append(combo)
         else:
-            # 对于有 zealot 的情况，需要区分 ID-align 和 ID-cluster
+            # 有zealot情况：需要考虑zealot身份对齐方式和身份分布方式的组合效应
             for zealot_identity in zealot_identity_alignments:
                 for identity_dist in identity_distributions:
                     combo = {
-                        'zealot_count': fixed_zealot_count,
-                        'zealot_mode': zealot_mode,
-                        'zealot_identity_allocation': zealot_identity,
-                        'cluster_identity': identity_dist,
+                        'zealot_count': fixed_zealot_count,          # 固定zealot数量
+                        'zealot_mode': zealot_mode,                  # zealot分布模式
+                        'zealot_identity_allocation': zealot_identity,  # zealot身份对齐方式
+                        'cluster_identity': identity_dist,           # 身份分布方式
                         'label': f'{zealot_mode.capitalize()}, ID-align={zealot_identity}, ID-cluster={identity_dist}',
                         'steps': base_config.steps
                     }
@@ -169,39 +187,52 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
     """
     运行单次模拟并获取最终状态的统计指标
     
+    该函数创建一个模拟实例，运行指定步数，然后计算四个关键指标：
+    - Mean Opinion: 系统中非zealot agent的平均意见值
+    - Variance: 意见分布的方差，衡量意见分化程度
+    - Identity Opinion Difference: 不同身份群体间的平均意见差异
+    - Polarization Index: 极化指数，衡量系统的极化程度
+    
     Args:
-    config: 模拟配置
-    steps: 运行步数
+        config (SimulationConfig): 模拟配置对象，包含网络、agent、zealot等参数
+        steps (int, optional): 模拟运行的步数. Defaults to 500.
     
     Returns:
-    dict: 包含各项统计指标的字典
+        Dict[str, float]: 包含四个统计指标的字典
+            - 'mean_opinion': 平均意见值
+            - 'variance': 意见方差
+            - 'identity_opinion_difference': 身份间意见差异
+            - 'polarization_index': 极化指数
+    
+    Raises:
+        Exception: 当模拟过程中出现错误时抛出异常
     """
+    # 创建模拟实例
     sim = Simulation(config)
     
-    # 运行模拟
+    # 逐步运行模拟至稳定状态
     for _ in range(steps):
         sim.step()
     
-    # 获取统计指标
+    # 从最终状态计算各项统计指标
     mean_stats = calculate_mean_opinion(sim, exclude_zealots=True)
     variance_stats = calculate_variance_metrics(sim, exclude_zealots=True)
     identity_stats = calculate_identity_statistics(sim, exclude_zealots=True)
     polarization = get_polarization_index(sim)
     
     # 计算identity opinion difference (身份间意见差异)
-    # 注意：为保持数据兼容性，变量名仍使用variance_per_identity
-    variance_per_identity = 0.0
+    identity_opinion_difference = 0.0
     if 'identity_difference' in identity_stats:
-        variance_per_identity = identity_stats['identity_difference']['abs_mean_opinion_difference']
+        identity_opinion_difference = identity_stats['identity_difference']['abs_mean_opinion_difference']
     else:
         # 理论上在正常情况下不应该到达这里（zealot数量足够小时）
         print("Warning: identity_difference not found, this should not happen under normal conditions")
-        variance_per_identity = 0.0
+        identity_opinion_difference = 0.0
     
     return {
         'mean_opinion': mean_stats['mean_opinion'],
         'variance': variance_stats['overall_variance'],
-        'variance_per_identity': variance_per_identity,
+        'identity_opinion_difference': identity_opinion_difference,
         'polarization_index': polarization
     }
 
@@ -209,21 +240,42 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
 def run_parameter_sweep(plot_type: str, combination: Dict[str, Any], 
                        x_values: List[float], num_runs: int = 5) -> Dict[str, List[List[float]]]:
     """
-    对特定参数组合进行参数扫描
+    对特定参数组合进行参数扫描实验
+    
+    该函数针对给定的参数组合，在x轴的每个取值点运行多次模拟，收集统计数据。
+    这是实验的核心执行函数，支持两种类型的扫描：
+    - zealot_numbers: 固定morality比例，扫描不同的zealot数量
+    - morality_ratios: 固定zealot数量，扫描不同的morality比例
     
     Args:
-    plot_type: 'zealot_numbers' 或 'morality_ratios'
-    combination: 参数组合字典
-    x_values: x轴的取值列表
-    num_runs: 每个参数点运行的次数
+        plot_type (str): 实验类型
+            - 'zealot_numbers': x轴为zealot数量的实验
+            - 'morality_ratios': x轴为morality比例的实验
+        combination (Dict[str, Any]): 参数组合字典，包含：
+            - zealot_mode: zealot分布模式 ('random', 'clustered', 'none')
+            - morality_rate: morality比例 (0.0-1.0)
+            - zealot_identity_allocation: 是否按身份分配zealot
+            - cluster_identity: 是否聚类身份分布
+            - label: 组合标签
+            - steps: 模拟步数
+        x_values (List[float]): x轴扫描的取值列表，如 [0, 1, 2, ...]
+        num_runs (int, optional): 每个x值点重复运行次数. Defaults to 5.
     
     Returns:
-    dict: 包含各指标的数据矩阵 {metric: [runs_for_x1, runs_for_x2, ...]}
+        Dict[str, List[List[float]]]: 嵌套的结果数据结构
+            格式: {metric_name: [x1_runs, x2_runs, ...]}
+            其中 x1_runs = [run1_value, run2_value, ...]
+            
+            包含的指标:
+            - 'mean_opinion': 平均意见值的多次运行结果
+            - 'variance': 意见方差的多次运行结果  
+            - 'identity_opinion_difference': 身份间意见差异的多次运行结果
+            - 'polarization_index': 极化指数的多次运行结果
     """
     results = {
         'mean_opinion': [],
         'variance': [],
-        'variance_per_identity': [],
+        'identity_opinion_difference': [],
         'polarization_index': []
     }
     
@@ -250,7 +302,7 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
         runs_data = {
             'mean_opinion': [],
             'variance': [],
-            'variance_per_identity': [],
+            'identity_opinion_difference': [],
             'polarization_index': []
         }
         
@@ -313,7 +365,7 @@ def save_data_incrementally(plot_type: str, x_values: List[float],
         new_data_rows = []
         
         for i, x_val in enumerate(x_values):
-            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
+            for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
                 for run_idx, value in enumerate(results[metric][i]):
                     new_data_rows.append({
                         'x_value': x_val,
@@ -452,7 +504,7 @@ def process_accumulated_data_for_plotting(loaded_data: Dict[str, pd.DataFrame]) 
         combo_results = {
             'mean_opinion': [],
             'variance': [],
-            'variance_per_identity': [],
+            'identity_opinion_difference': [],
             'polarization_index': []
         }
         
@@ -462,7 +514,7 @@ def process_accumulated_data_for_plotting(loaded_data: Dict[str, pd.DataFrame]) 
         for x_val in combo_x_values:
             x_data = df[df['x_value'] == x_val]
             
-            for metric in ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']:
+            for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
                 metric_data = x_data[x_data['metric'] == metric]['value'].tolist()
                 combo_results[metric].append(metric_data)
         
@@ -638,11 +690,11 @@ def plot_accumulated_results(plot_type: str, x_values: List[float],
     total_runs_per_combination: 每个组合的总运行次数
     output_dir: 输出目录
     """
-    metrics = ['mean_opinion', 'variance', 'variance_per_identity', 'polarization_index']
+    metrics = ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']
     metric_labels = {
         'mean_opinion': 'Mean Opinion',
         'variance': 'Opinion Variance',
-        'variance_per_identity': 'Identity Opinion Difference',
+        'identity_opinion_difference': 'Identity Opinion Difference',
         'polarization_index': 'Polarization Index'
     }
     
