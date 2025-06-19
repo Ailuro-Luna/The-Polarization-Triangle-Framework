@@ -34,6 +34,7 @@ from polarization_triangle.analysis.statistics import (
     calculate_identity_statistics,
     get_polarization_index
 )
+from polarization_triangle.utils.data_manager import ExperimentDataManager
 
 
 # =====================================
@@ -55,38 +56,7 @@ def format_duration(duration: float) -> str:
     return f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
 
 
-def save_batch_info(output_dir: str, batch_name: str, num_runs: int, 
-                   max_zealots: int = None, max_morality: int = None, 
-                   execution_time: float = 0, combinations_info: str = ""):
-    """
-    保存批次信息到文件
-    
-    Args:
-    output_dir: 输出目录
-    batch_name: 批次名称
-    num_runs: 运行次数
-    max_zealots: 最大zealot数量（可选）
-    max_morality: 最大morality比例（可选）
-    execution_time: 执行时间
-    combinations_info: 组合信息
-    """
-    data_dir = os.path.join(output_dir, "accumulated_data")
-    os.makedirs(data_dir, exist_ok=True)
-    
-    batch_info_file = os.path.join(data_dir, f"batch_info_{batch_name}.txt")
-    with open(batch_info_file, "w") as f:
-        f.write(f"Batch Information\n")
-        f.write(f"================\n\n")
-        f.write(f"Batch name: {batch_name}\n")
-        f.write(f"Number of runs: {num_runs}\n")
-        if max_zealots is not None:
-            f.write(f"Max zealots: {max_zealots}\n")
-        if max_morality is not None:
-            f.write(f"Max morality ratio: {max_morality}%\n")
-        f.write(f"Execution time: {format_duration(execution_time)}\n")
-        f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        if combinations_info:
-            f.write(f"\n{combinations_info}\n")
+# 注：save_batch_info 函数已被 ExperimentDataManager 的批次元数据功能替代
 
 
 # =====================================
@@ -336,193 +306,35 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
 
 
 # =====================================
-# 数据管理函数
+# 数据管理函数 (已重构为使用 ExperimentDataManager)
 # =====================================
 
-def save_data_incrementally(plot_type: str, x_values: List[float], 
-                           all_results: Dict[str, Dict[str, List[List[float]]]], 
-                           output_dir: str, batch_info: str = ""):
+def save_data_with_manager(data_manager: ExperimentDataManager, 
+                          plot_type: str, 
+                          x_values: List[float], 
+                          all_results: Dict[str, Dict[str, List[List[float]]]], 
+                          batch_metadata: Dict[str, Any]) -> None:
     """
-    以追加模式保存数据到CSV文件，支持累积多次运行的结果
+    使用新的数据管理器保存实验数据
     
     Args:
-    plot_type: 'zealot_numbers' 或 'morality_ratios'
-    x_values: x轴取值
-    all_results: 所有组合的结果数据
-    output_dir: 输出目录
-    batch_info: 批次信息，用于标识本次运行
+        data_manager: 数据管理器实例
+        plot_type: 'zealot_numbers' 或 'morality_ratios'
+        x_values: x轴取值
+        all_results: 所有组合的结果数据
+        batch_metadata: 批次元数据
     """
-    data_dir = os.path.join(output_dir, "accumulated_data")
-    os.makedirs(data_dir, exist_ok=True)
+    # 转换数据格式以适配新的数据管理器
+    batch_data = {}
     
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    if not batch_info:
-        batch_info = timestamp
-    
-    # 为每个参数组合保存数据
-    for combo_label, results in all_results.items():
-        # 准备新的数据行
-        new_data_rows = []
-        
-        for i, x_val in enumerate(x_values):
-            for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
-                for run_idx, value in enumerate(results[metric][i]):
-                    new_data_rows.append({
-                        'x_value': x_val,
-                        'metric': metric,
-                        'run': run_idx,
-                        'value': value,
-                        'combination': combo_label,
-                        'batch_id': batch_info,
-                        'timestamp': timestamp
-                    })
-        
-        new_df = pd.DataFrame(new_data_rows)
-        
-        # 生成文件名
-        safe_label = combo_label.replace('/', '_').replace(' ', '_').replace('=', '_').replace(',', '_')
-        filename = f"{plot_type}_{safe_label}_accumulated.csv"
-        filepath = os.path.join(data_dir, filename)
-        
-        # 追加或创建文件
-        if os.path.exists(filepath):
-            # 文件存在，追加数据
-            new_df.to_csv(filepath, mode='a', header=False, index=False)
-            print(f"Appended data to: {filepath}")
-        else:
-            # 文件不存在，创建新文件
-            new_df.to_csv(filepath, index=False)
-            print(f"Created new data file: {filepath}")
-
-
-def load_accumulated_data(output_dir: str) -> Dict[str, pd.DataFrame]:
-    """
-    读取累积的数据文件
-    
-    Args:
-    output_dir: 输出目录
-    
-    Returns:
-    dict: 文件名对应的DataFrame字典
-    """
-    data_dir = os.path.join(output_dir, "accumulated_data")
-    if not os.path.exists(data_dir):
-        print(f"Data directory not found: {data_dir}")
-        return {}
-    
-    # 查找所有累积数据文件
-    pattern = os.path.join(data_dir, "*_accumulated.csv")
-    files = glob(pattern)
-    
-    if not files:
-        print(f"No accumulated data files found in: {data_dir}")
-        return {}
-    
-    loaded_data = {}
-    
-    print("📂 Loading accumulated data files:")
-    for filepath in files:
-        filename = os.path.basename(filepath)
-        try:
-            df = pd.read_csv(filepath)
-            loaded_data[filename] = df
-            
-            # 计算总运行次数（与process_accumulated_data_for_plotting中的计算保持一致）
-            total_data_points = len(df)
-            unique_x_values = len(df['x_value'].unique()) if not df.empty else 0
-            unique_metrics = len(df['metric'].unique()) if not df.empty else 0
-            
-            # 计算总运行次数：总数据点 / (x值数量 * 指标数量)
-            total_runs = total_data_points // (unique_x_values * unique_metrics) if unique_x_values > 0 and unique_metrics > 0 else 0
-            
-            # 统计批次数（用于参考）
-            total_batches = len(df['batch_id'].unique()) if 'batch_id' in df.columns and not df.empty else 0
-            
-            print(f"  ✅ {filename}: {len(df)} records, {total_runs} total runs ({total_batches} batches)")
-        except Exception as e:
-            print(f"  ❌ Failed to load {filename}: {e}")
-    
-    return loaded_data
-
-
-def process_accumulated_data_for_plotting(loaded_data: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, Dict[str, List[List[float]]]], List[float], Dict[str, int]]:
-    """
-    将累积数据处理成绘图所需的格式
-    
-    Args:
-    loaded_data: 已加载的数据字典
-    
-    Returns:
-    tuple: (all_results, x_values, total_runs_per_combination)
-    """
-    if not loaded_data:
-        return {}, [], {}
-    
-    # 确定plot_type（从文件名推断）
-    first_filename = list(loaded_data.keys())[0]
-    if first_filename.startswith('zealot_numbers'):
-        plot_type = 'zealot_numbers'
-    elif first_filename.startswith('morality_ratios'):
-        plot_type = 'morality_ratios'
-    else:
-        print("Warning: Cannot determine plot type from filename")
-        plot_type = 'unknown'
-    
-    all_results = {}
-    x_values_set = set()
-    total_runs_per_combination = {}
-    
-    for filename, df in loaded_data.items():
-        if df.empty:
-            continue
-            
-        # 提取组合标签（从文件名）
-        if plot_type == 'zealot_numbers':
-            combo_label = filename.replace('zealot_numbers_', '').replace('_accumulated.csv', '').replace('_', ' ')
-        elif plot_type == 'morality_ratios':
-            combo_label = filename.replace('morality_ratios_', '').replace('_accumulated.csv', '').replace('_', ' ')
-        else:
-            combo_label = filename.replace('_accumulated.csv', '')
-        
-        # 恢复原始标签格式
-        combo_label = combo_label.replace('Clustered', 'Clustered').replace('Random', 'Random')
-        
-        # 统计总运行次数（计算实际的数据点数量，而不是batch数）
-        total_data_points = len(df)
-        unique_x_values = len(df['x_value'].unique())
-        unique_metrics = len(df['metric'].unique())
-        
-        # 计算总运行次数：总数据点 / (x值数量 * 指标数量)
-        total_runs = total_data_points // (unique_x_values * unique_metrics) if unique_x_values > 0 and unique_metrics > 0 else 0
-        
-        total_runs_per_combination[combo_label] = total_runs
-        
-        # 收集所有x值
-        x_values_set.update(df['x_value'].unique())
-        
-        # 按组合处理数据
-        combo_results = {
-            'mean_opinion': [],
-            'variance': [],
-            'identity_opinion_difference': [],
-            'polarization_index': []
+    for combination_label, results in all_results.items():
+        batch_data[combination_label] = {
+            'x_values': x_values,
+            'results': results
         }
-        
-        # 获取所有x值并排序
-        combo_x_values = sorted(df['x_value'].unique())
-        
-        for x_val in combo_x_values:
-            x_data = df[df['x_value'] == x_val]
-            
-            for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
-                metric_data = x_data[x_data['metric'] == metric]['value'].tolist()
-                combo_results[metric].append(metric_data)
-        
-        all_results[combo_label] = combo_results
     
-    x_values = sorted(list(x_values_set))
-    
-    return all_results, x_values, total_runs_per_combination
+    # 使用数据管理器保存数据
+    data_manager.save_batch_results(plot_type, batch_data, batch_metadata)
 
 
 # =====================================
@@ -597,7 +409,7 @@ def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[s
             # 解析标签中的配置信息
             if 'None' in label:
                 zealot_mode = 'None'
-                if 'ID-cluster True' in label:
+                if 'ID-cluster=True' in label:
                     id_cluster = 'True'
                     color = zealot_mode_colors[zealot_mode]['base']
                     marker = id_cluster_markers[id_cluster]
@@ -618,8 +430,8 @@ def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[s
                 
             elif 'Random' in label:
                 zealot_mode = 'Random'
-                id_align = 'True' if 'ID-align True' in label else 'False'
-                id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                id_align = 'True' if 'ID-align=True' in label else 'False'
+                id_cluster = 'True' if 'ID-cluster=True' in label else 'False'
                 
                 color = zealot_mode_colors[zealot_mode]['base'] if id_align == 'True' else zealot_mode_colors[zealot_mode]['light']
                 marker = id_cluster_markers[id_cluster]
@@ -635,8 +447,8 @@ def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[s
                 
             elif 'Clustered' in label:
                 zealot_mode = 'Clustered'
-                id_align = 'True' if 'ID-align True' in label else 'False'
-                id_cluster = 'True' if 'ID-cluster True' in label else 'False'
+                id_align = 'True' if 'ID-align=True' in label else 'False'
+                id_cluster = 'True' if 'ID-cluster=True' in label else 'False'
                 
                 color = zealot_mode_colors[zealot_mode]['base'] if id_align == 'True' else zealot_mode_colors[zealot_mode]['light']
                 marker = id_cluster_markers[id_cluster]
@@ -676,20 +488,23 @@ def simplify_label(combo_label: str) -> str:
     return combo_label
 
 
-def plot_accumulated_results(plot_type: str, x_values: List[float], 
-                           all_results: Dict[str, Dict[str, List[List[float]]]], 
-                           total_runs_per_combination: Dict[str, int],
-                           output_dir: str):
+def plot_results_with_manager(data_manager: ExperimentDataManager, 
+                            plot_type: str) -> None:
     """
-    绘制累积数据的结果图表，文件名中包含总运行次数信息
+    使用数据管理器绘制实验结果图表
     
     Args:
-    plot_type: 'zealot_numbers' 或 'morality_ratios'
-    x_values: x轴取值
-    all_results: 所有组合的结果数据
-    total_runs_per_combination: 每个组合的总运行次数
-    output_dir: 输出目录
+        data_manager: 数据管理器实例  
+        plot_type: 'zealot_numbers' 或 'morality_ratios'
     """
+    # 从数据管理器获取绘图数据
+    all_results, x_values, total_runs_per_combination = data_manager.convert_to_plotting_format(plot_type)
+    
+    if not all_results:
+        print(f"❌ No data found for {plot_type} plotting")
+        return
+    
+    output_dir = str(data_manager.base_dir)
     metrics = ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']
     metric_labels = {
         'mean_opinion': 'Mean Opinion',
@@ -799,7 +614,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
                            num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30,
                            batch_name: str = ""):
     """
-    运行测试并以追加模式保存数据（第一部分）
+    运行测试并使用新的数据管理器保存数据（第一部分）
     
     Args:
     output_dir: 输出目录
@@ -808,13 +623,13 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     max_morality: 最大morality ratio (%)
     batch_name: 批次名称，用于标识本次运行
     """
-    print("🔬 Running Tests and Accumulating Data")
+    print("🔬 Running Tests and Accumulating Data with New Data Manager")
     print("=" * 70)
     
     start_time = time.time()
     
-    # 创建输出目录
-    os.makedirs(output_dir, exist_ok=True)
+    # 创建数据管理器
+    data_manager = ExperimentDataManager(output_dir)
     
     # 获取参数组合
     combinations = create_config_combinations()
@@ -828,6 +643,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"   Max zealots: {max_zealots}")
     print(f"   Max morality ratio: {max_morality}%")
     print(f"   Output directory: {output_dir}")
+    print(f"   Storage format: Parquet (optimized for space and speed)")
     print()
     
     # === 处理图1：x轴为zealot numbers ===
@@ -844,13 +660,21 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
         results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs)
         zealot_results[combo['label']] = results
     
-    # 保存zealot numbers的数据
-    save_data_incrementally('zealot_numbers', zealot_x_values, zealot_results, output_dir, batch_name)
+    # 使用新的数据管理器保存zealot numbers的数据
+    zealot_batch_metadata = {
+        'batch_id': batch_name,
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+        'experiment_type': 'zealot_numbers',
+        'num_runs': num_runs,
+        'max_zealots': max_zealots,
+        'x_range': [0, max_zealots],
+        'combinations_count': len(combinations['zealot_numbers'])
+    }
+    
+    save_data_with_manager(data_manager, 'zealot_numbers', zealot_x_values, zealot_results, zealot_batch_metadata)
     
     plot1_end_time = time.time()
     plot1_duration = plot1_end_time - plot1_start_time
-    hours1, remainder1 = divmod(plot1_duration, 3600)
-    minutes1, seconds1 = divmod(remainder1, 60)
     
     print(f"⏱️  Test Type 1 completed in: {format_duration(plot1_duration)}")
     print()
@@ -869,13 +693,21 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
         results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
         morality_results[combo['label']] = results
     
-    # 保存morality ratio的数据
-    save_data_incrementally('morality_ratios', morality_x_values, morality_results, output_dir, batch_name)
+    # 使用新的数据管理器保存morality ratio的数据
+    morality_batch_metadata = {
+        'batch_id': batch_name,
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+        'experiment_type': 'morality_ratios', 
+        'num_runs': num_runs,
+        'max_morality': max_morality,
+        'x_range': [0, max_morality],
+        'combinations_count': len(combinations['morality_ratios'])
+    }
+    
+    save_data_with_manager(data_manager, 'morality_ratios', morality_x_values, morality_results, morality_batch_metadata)
     
     plot2_end_time = time.time()
     plot2_duration = plot2_end_time - plot2_start_time
-    hours2, remainder2 = divmod(plot2_duration, 3600)
-    minutes2, seconds2 = divmod(remainder2, 60)
     
     print(f"⏱️  Test Type 2 completed in: {format_duration(plot2_duration)}")
     print()
@@ -894,59 +726,68 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"   Test Type 1 (Zealot Numbers): {format_duration(plot1_duration)}")
     print(f"   Test Type 2 (Morality Ratios): {format_duration(plot2_duration)}")
     print(f"   Total execution time: {format_duration(elapsed_time)}")
-    print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
+    print(f"📁 Data saved using Parquet format in: {output_dir}/")
     
-    # 保存批次信息
-    save_batch_info(output_dir, batch_name, num_runs, max_zealots, max_morality, elapsed_time)
+    # 保存实验配置到数据管理器
+    experiment_config = {
+        'batch_name': batch_name,
+        'num_runs': num_runs,
+        'max_zealots': max_zealots,
+        'max_morality': max_morality,
+        'elapsed_time': elapsed_time,
+        'total_combinations': len(combinations['zealot_numbers']) + len(combinations['morality_ratios'])
+    }
+    data_manager.save_experiment_config(experiment_config)
+    
+    # 显示数据管理器摘要
+    print("\n" + data_manager.export_summary_report())
 
 
 def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis"):
     """
-    从累积数据文件中读取数据并生成图表（第二部分）
+    从新的数据管理器中读取数据并生成图表（第二部分）
     
     Args:
-    output_dir: 输出目录（包含accumulated_data子文件夹）
+    output_dir: 输出目录
     """
-    print("📊 Generating Plots from Accumulated Data")
+    print("📊 Generating Plots from Data Manager")
     print("=" * 70)
     
     start_time = time.time()
     
-    # 加载累积数据
-    loaded_data = load_accumulated_data(output_dir)
-    if not loaded_data:
-        print("❌ No accumulated data found. Please run data collection first.")
-        return
+    # 创建数据管理器
+    data_manager = ExperimentDataManager(output_dir)
     
-    # 按图类型分组数据文件
-    zealot_files = {k: v for k, v in loaded_data.items() if k.startswith('zealot_numbers')}
-    morality_files = {k: v for k, v in loaded_data.items() if k.startswith('morality_ratios')}
+    # 显示数据摘要
+    print("\n" + data_manager.export_summary_report())
     
-    # 处理zealot numbers数据并绘图
-    if zealot_files:
-        print("\n📈 Processing Zealot Numbers Data...")
-        zealot_results, zealot_x_values, zealot_runs_info = process_accumulated_data_for_plotting(zealot_files)
-        if zealot_results:
-            plot_accumulated_results('zealot_numbers', zealot_x_values, zealot_results, zealot_runs_info, output_dir)
+    # 生成zealot numbers图表
+    print("\n📈 Generating Zealot Numbers Plots...")
+    zealot_summary = data_manager.get_experiment_summary('zealot_numbers')
+    if zealot_summary['total_records'] > 0:
+        plot_results_with_manager(data_manager, 'zealot_numbers')
+        print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots")
+    else:
+        print("❌ No zealot numbers data found")
     
-    # 处理morality ratios数据并绘图
-    if morality_files:
-        print("\n📈 Processing Morality Ratios Data...")
-        morality_results, morality_x_values, morality_runs_info = process_accumulated_data_for_plotting(morality_files)
-        if morality_results:
-            plot_accumulated_results('morality_ratios', morality_x_values, morality_results, morality_runs_info, output_dir)
+    # 生成morality ratios图表
+    print("\n📈 Generating Morality Ratios Plots...")
+    morality_summary = data_manager.get_experiment_summary('morality_ratios')
+    if morality_summary['total_records'] > 0:
+        plot_results_with_manager(data_manager, 'morality_ratios')
+        print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots")
+    else:
+        print("❌ No morality ratios data found")
     
     # 计算总耗时
     end_time = time.time()
     elapsed_time = end_time - start_time
-    hours, remainder = divmod(elapsed_time, 3600)
-    minutes, seconds = divmod(remainder, 60)
     
     print("\n" + "=" * 70)
     print("🎉 Plot Generation Completed Successfully!")
-    print(f"📊 Generated plots from accumulated data")
-    print(f"⏱️  Total plotting time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
-    print(f"📁 Plots saved to: {output_dir}")
+    print(f"📊 Generated plots from Parquet data files")
+    print(f"⏱️  Total plotting time: {format_duration(elapsed_time)}")
+    print(f"📁 Plots saved to: {output_dir}/mean_plots/")
 
 
 def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_analysis", 
@@ -974,7 +815,7 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
                                num_runs: int = 5, max_morality: int = 30,
                                batch_name: str = ""):
     """
-    单独运行 no zealot 的 morality ratio 数据收集
+    单独运行 no zealot 的 morality ratio 数据收集（使用新数据管理器）
     
     Args:
     output_dir: 输出目录
@@ -982,13 +823,13 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     max_morality: 最大 morality ratio (%)
     batch_name: 批次名称
     """
-    print("🔬 Running No Zealot Morality Ratio Data Collection")
+    print("🔬 Running No Zealot Morality Ratio Data Collection with New Data Manager")
     print("=" * 70)
     
     start_time = time.time()
     
-    # 创建输出目录
-    os.makedirs(output_dir, exist_ok=True)
+    # 创建数据管理器
+    data_manager = ExperimentDataManager(output_dir)
     
     # 获取所有参数组合
     combinations = create_config_combinations()
@@ -1010,6 +851,7 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     print(f"   Max morality ratio: {max_morality}%")
     print(f"   Number of no-zealot combinations: {len(no_zealot_combinations)}")
     print(f"   Output directory: {output_dir}")
+    print(f"   Storage format: Parquet (optimized for space and speed)")
     print()
     
     # 设置 morality ratio 的 x 轴取值
@@ -1024,28 +866,43 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
         results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
         morality_results[combo['label']] = results
     
-    # 保存 no zealot morality ratio 数据
-    save_data_incrementally('morality_ratios', morality_x_values, morality_results, output_dir, batch_name)
+    # 使用新的数据管理器保存 no zealot morality ratio 数据
+    no_zealot_batch_metadata = {
+        'batch_id': batch_name,
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+        'experiment_type': 'morality_ratios_no_zealot',
+        'num_runs': num_runs,
+        'max_morality': max_morality,
+        'x_range': [0, max_morality],
+        'combinations_count': len(no_zealot_combinations),
+        'special_conditions': 'no_zealot_only'
+    }
+    
+    save_data_with_manager(data_manager, 'morality_ratios', morality_x_values, morality_results, no_zealot_batch_metadata)
     
     # 计算耗时
     end_time = time.time()
     elapsed_time = end_time - start_time
-    hours, remainder = divmod(elapsed_time, 3600)
-    minutes, seconds = divmod(remainder, 60)
     
     print("\n" + "=" * 70)
     print("🎉 No Zealot Data Collection Completed Successfully!")
     print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
     print(f"⏱️  Total execution time: {format_duration(elapsed_time)}")
-    print(f"📁 Data accumulated in: {output_dir}/accumulated_data/")
+    print(f"📁 Data saved using Parquet format in: {output_dir}/")
     
-    # 构建组合信息
-    combinations_info = f"Number of combinations: {len(no_zealot_combinations)}\nCombinations run:\n"
-    for combo in no_zealot_combinations:
-        combinations_info += f"  - {combo['label']}\n"
+    # 保存实验配置到数据管理器
+    experiment_config = {
+        'batch_name': batch_name,
+        'num_runs': num_runs,
+        'max_morality': max_morality,
+        'elapsed_time': elapsed_time,
+        'total_combinations': len(no_zealot_combinations),
+        'experiment_type': 'no_zealot_only'
+    }
+    data_manager.save_experiment_config(experiment_config)
     
-    # 保存批次信息
-    save_batch_info(output_dir, batch_name, num_runs, None, max_morality, elapsed_time, combinations_info)
+    # 显示数据管理器摘要
+    print("\n" + data_manager.export_summary_report())
 
 
 if __name__ == "__main__":
@@ -1066,9 +923,9 @@ if __name__ == "__main__":
     # 可以多次运行以下命令来积累数据：
     run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=3,  # 每次运行100轮测试
-        max_zealots=3,  
-        max_morality=3,
+        num_runs=2,  # 每次运行100轮测试
+        max_zealots=2,  
+        max_morality=2,
         # batch_name="batch_001"  # 可选：给批次命名
     )
     
