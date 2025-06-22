@@ -24,6 +24,7 @@ import pandas as pd
 import os
 import copy
 import time
+import multiprocessing
 from tqdm import tqdm
 from typing import Dict, List, Tuple, Any
 import itertools
@@ -60,6 +61,62 @@ def format_duration(duration: float) -> str:
 
 
 # 注：save_batch_info 函数已被 ExperimentDataManager 的批次元数据功能替代
+
+
+# =====================================
+# 并行计算支持函数
+# =====================================
+
+def run_single_simulation_task(task_params):
+    """
+    单个模拟任务的包装函数，用于多进程并行计算
+    
+    Args:
+        task_params: 包含任务参数的元组
+            (plot_type, combination, x_val, run_idx, steps, process_id)
+    
+    Returns:
+        tuple: (x_val, run_idx, results_dict, success, error_msg)
+    """
+    try:
+        plot_type, combination, x_val, run_idx, steps, process_id = task_params
+        
+        # 设置进程特定的随机种子
+        np.random.seed((int(x_val * 1000) + run_idx + process_id) % (2**32))
+        
+        # 构建配置
+        base_config = copy.deepcopy(high_polarization_config)
+        
+        # 设置固定参数
+        if plot_type == 'zealot_numbers':
+            base_config.morality_rate = combination['morality_rate']
+            base_config.zealot_identity_allocation = combination['zealot_identity_allocation']
+            base_config.cluster_identity = combination['cluster_identity']
+            base_config.enable_zealots = True
+            base_config.steps = combination['steps']
+            # 设置当前x值对应的参数
+            base_config.zealot_count = int(x_val)
+            base_config.zealot_mode = combination['zealot_mode']
+            if x_val == 0:
+                base_config.enable_zealots = False
+        else:  # morality_ratios
+            base_config.zealot_count = combination['zealot_count']
+            base_config.zealot_mode = combination['zealot_mode']
+            base_config.zealot_identity_allocation = combination['zealot_identity_allocation']
+            base_config.cluster_identity = combination['cluster_identity']
+            base_config.enable_zealots = combination['zealot_mode'] != 'none'
+            base_config.steps = combination['steps']
+            # 设置当前x值对应的参数
+            base_config.morality_rate = x_val / 100.0  # 转换为0-1范围
+        
+        # 运行单次模拟
+        results = run_single_simulation(base_config, steps)
+        
+        return (x_val, run_idx, results, True, None)
+        
+    except Exception as e:
+        error_msg = f"Process {process_id}: Simulation failed for x={x_val}, run={run_idx}: {str(e)}"
+        return (x_val, run_idx, None, False, error_msg)
 
 
 # =====================================
@@ -238,7 +295,7 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
 
 
 def run_parameter_sweep(plot_type: str, combination: Dict[str, Any], 
-                       x_values: List[float], num_runs: int = 5) -> Dict[str, List[List[float]]]:
+                       x_values: List[float], num_runs: int = 5, num_processes: int = 1) -> Dict[str, List[List[float]]]:
     """
     对特定参数组合进行参数扫描实验
     
@@ -260,6 +317,7 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
             - steps: 模拟步数
         x_values (List[float]): x轴扫描的取值列表，如 [0, 1, 2, ...]
         num_runs (int, optional): 每个x值点重复运行次数. Defaults to 5.
+        num_processes (int, optional): 并行进程数，1表示串行执行. Defaults to 1.
     
     Returns:
         Dict[str, List[List[float]]]: 嵌套的结果数据结构
@@ -274,6 +332,18 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
             - 'variance_per_identity_1': identity=1组内方差的多次运行结果
             - 'variance_per_identity_-1': identity=-1组内方差的多次运行结果
     """
+    # 选择串行或并行执行
+    if num_processes == 1:
+        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs)
+    else:
+        return run_parameter_sweep_parallel(plot_type, combination, x_values, num_runs, num_processes)
+
+
+def run_parameter_sweep_serial(plot_type: str, combination: Dict[str, Any], 
+                              x_values: List[float], num_runs: int = 5) -> Dict[str, List[List[float]]]:
+    """
+    串行版本的参数扫描（原有逻辑）
+    """
     results = {
         'mean_opinion': [],
         'variance': [],
@@ -284,7 +354,6 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
     }
     
     base_config = copy.deepcopy(high_polarization_config)
-    # base_config.steps = 500
     
     # 设置固定参数
     if plot_type == 'zealot_numbers':
@@ -344,6 +413,110 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
             results[metric].append(runs_data[metric])
     
     return results
+
+
+def run_parameter_sweep_parallel(plot_type: str, combination: Dict[str, Any], 
+                                x_values: List[float], num_runs: int = 5, num_processes: int = 4) -> Dict[str, List[List[float]]]:
+    """
+    并行版本的参数扫描
+    """
+    print(f"🚀 使用 {num_processes} 个进程进行并行计算...")
+    
+    # 创建所有任务
+    tasks = []
+    for x_val in x_values:
+        for run_idx in range(num_runs):
+            process_id = len(tasks) % num_processes  # 简单的进程ID分配
+            task = (plot_type, combination, x_val, run_idx, combination['steps'], process_id)
+            tasks.append(task)
+    
+    print(f"📊 总任务数: {len(tasks)} (x_values: {len(x_values)}, runs_per_x: {num_runs})")
+    
+    # 执行并行计算
+    try:
+        with multiprocessing.Pool(num_processes) as pool:
+            # 使用 imap 来显示进度
+            results_list = []
+            with tqdm(total=len(tasks), desc=f"Running {combination['label']} (parallel)") as pbar:
+                for result in pool.imap(run_single_simulation_task, tasks):
+                    results_list.append(result)
+                    pbar.update(1)
+    except Exception as e:
+        print(f"❌ 并行计算失败，回退到串行模式: {e}")
+        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs)
+    
+    # 整理结果
+    return organize_parallel_results(results_list, x_values, num_runs)
+
+
+def organize_parallel_results(results_list: List[Tuple], x_values: List[float], num_runs: int) -> Dict[str, List[List[float]]]:
+    """
+    将并行计算结果重新组织为原有的数据结构
+    """
+    # 初始化结果结构
+    organized_results = {
+        'mean_opinion': [],
+        'variance': [],
+        'identity_opinion_difference': [],
+        'polarization_index': [],
+        'variance_per_identity_1': [],
+        'variance_per_identity_-1': []
+    }
+    
+    # 统计成功和失败的任务
+    success_count = 0
+    failure_count = 0
+    
+    # 按 x_value 分组整理结果
+    for x_val in x_values:
+        runs_data = {
+            'mean_opinion': [],
+            'variance': [],
+            'identity_opinion_difference': [],
+            'polarization_index': [],
+            'variance_per_identity_1': [],
+            'variance_per_identity_-1': []
+        }
+        
+        # 收集当前 x_val 的所有运行结果
+        for run_idx in range(num_runs):
+            # 在结果列表中查找对应的结果
+            found_result = None
+            for result in results_list:
+                result_x_val, result_run_idx, result_data, success, error_msg = result
+                if result_x_val == x_val and result_run_idx == run_idx:
+                    found_result = result
+                    break
+            
+            if found_result and found_result[3]:  # success = True
+                result_data = found_result[2]
+                # 处理基础指标
+                for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
+                    runs_data[metric].append(result_data[metric])
+                # 处理 variance per identity 指标
+                variance_per_identity = result_data['variance_per_identity']
+                runs_data['variance_per_identity_1'].append(variance_per_identity['identity_1'])
+                runs_data['variance_per_identity_-1'].append(variance_per_identity['identity_-1'])
+                success_count += 1
+            else:
+                # 处理失败的任务
+                if found_result:
+                    print(f"⚠️  {found_result[4]}")  # 打印错误信息
+                else:
+                    print(f"⚠️  Missing result for x={x_val}, run={run_idx}")
+                
+                # 使用NaN填充失败的运行
+                for metric in runs_data.keys():
+                    runs_data[metric].append(np.nan)
+                failure_count += 1
+        
+        # 将当前x值的所有运行结果添加到总结果中
+        for metric in organized_results.keys():
+            organized_results[metric].append(runs_data[metric])
+    
+    print(f"✅ 并行计算完成: {success_count} 成功, {failure_count} 失败")
+    
+    return organized_results
 
 
 # =====================================
@@ -861,7 +1034,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
 
 def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis", 
                            num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30,
-                           batch_name: str = ""):
+                           batch_name: str = "", num_processes: int = 1):
     """
     运行测试并使用新的数据管理器保存数据（第一部分）
     
@@ -871,6 +1044,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     max_zealots: 最大zealot数量
     max_morality: 最大morality ratio (%)
     batch_name: 批次名称，用于标识本次运行
+    num_processes: 并行进程数，1表示串行执行
     """
     print("🔬 Running Tests and Accumulating Data with New Data Manager")
     print("=" * 70)
@@ -891,6 +1065,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"   Number of runs this batch: {num_runs}")
     print(f"   Max zealots: {max_zealots}")
     print(f"   Max morality ratio: {max_morality}%")
+    print(f"   Parallel processes: {num_processes} ({'Parallel' if num_processes > 1 else 'Serial'})")
     print(f"   Output directory: {output_dir}")
     print(f"   Storage format: Parquet (optimized for space and speed)")
     print()
@@ -906,7 +1081,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     for combo in combinations['zealot_numbers']:
         print(f"Running combination: {combo['label']}")
-        results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs)
+        results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs, num_processes)
         zealot_results[combo['label']] = results
     
     # 使用新的数据管理器保存zealot numbers的数据
@@ -939,7 +1114,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     for combo in combinations['morality_ratios']:
         print(f"Running combination: {combo['label']}")
-        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
+        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes)
         morality_results[combo['label']] = results
     
     # 使用新的数据管理器保存morality ratio的数据
@@ -1040,7 +1215,7 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
 
 
 def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_analysis", 
-                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30):
+                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30, num_processes: int = 1):
     """
     运行完整的zealot和morality分析实验（保持向后兼容）
     
@@ -1049,12 +1224,13 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     num_runs: 每个参数点的运行次数
     max_zealots: 最大zealot数量
     max_morality: 最大morality ratio (%)
+    num_processes: 并行进程数，1表示串行执行
     """
     print("🔬 Starting Complete Zealot and Morality Analysis Experiment")
     print("=" * 70)
     
     # 第一步：运行测试并累积数据
-    run_and_accumulate_data(output_dir, num_runs, max_zealots, max_morality)
+    run_and_accumulate_data(output_dir, num_runs, max_zealots, max_morality, "", num_processes)
     
     # 第二步：从累积数据生成图表
     plot_from_accumulated_data(output_dir)
@@ -1062,7 +1238,7 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
 
 def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analysis", 
                                num_runs: int = 5, max_morality: int = 30,
-                               batch_name: str = ""):
+                               batch_name: str = "", num_processes: int = 1):
     """
     单独运行 no zealot 的 morality ratio 数据收集（使用新数据管理器）
     
@@ -1071,6 +1247,7 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     num_runs: 每个参数点的运行次数
     max_morality: 最大 morality ratio (%)
     batch_name: 批次名称
+    num_processes: 并行进程数，1表示串行执行
     """
     print("🔬 Running No Zealot Morality Ratio Data Collection with New Data Manager")
     print("=" * 70)
@@ -1112,7 +1289,7 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     
     for combo in no_zealot_combinations:
         print(f"Running no-zealot combination: {combo['label']}")
-        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs)
+        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes)
         morality_results[combo['label']] = results
     
     # 使用新的数据管理器保存 no zealot morality ratio 数据
@@ -1172,10 +1349,11 @@ if __name__ == "__main__":
     # 可以多次运行以下命令来积累数据：
     run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=2,  # 每次运行100轮测试
-        max_zealots=2,  
-        max_morality=2,
+        num_runs=100,  # 每次运行100轮测试
+        max_zealots=100,  
+        max_morality=100,
         # batch_name="batch_001"  # 可选：给批次命名
+        num_processes=8  # 使用8个进程进行并行计算
     )
     
     data_collection_end_time = time.time()
