@@ -42,6 +42,118 @@ from polarization_triangle.utils.data_manager import ExperimentDataManager
 
 
 # =====================================
+# 数据平滑和重采样函数
+# =====================================
+
+def resample_and_smooth_data(x_values, y_values, target_step=2, smooth_window=3):
+    """
+    对数据进行重采样和平滑处理
+    
+    Args:
+        x_values: 原始x值数组，如[0,1,2,3,4,5,6,7,8,9,10,...]
+        y_values: 原始y值数组
+        target_step: 目标步长，如2表示从[0,1,2,3,4,5,...]变为[0,2,4,6,8,10,...]
+        smooth_window: 平滑窗口大小
+    
+    Returns:
+        new_x_values, new_y_values: 重采样和平滑后的数据
+    """
+    # 确保输入是numpy数组
+    x_values = np.array(x_values)
+    y_values = np.array(y_values)
+    
+    # 移除NaN值
+    valid_mask = ~np.isnan(y_values)
+    x_clean = x_values[valid_mask]
+    y_clean = y_values[valid_mask]
+    
+    if len(x_clean) < 2:
+        return x_values, y_values
+    
+    # 1. 首先进行局部平滑（减少噪声）
+    if smooth_window >= 3 and len(y_clean) >= smooth_window:
+        # 使用移动平均进行初步平滑
+        kernel = np.ones(smooth_window) / smooth_window
+        y_smoothed = np.convolve(y_clean, kernel, mode='same')
+        
+        # 处理边界效应
+        half_window = smooth_window // 2
+        y_smoothed[:half_window] = y_clean[:half_window]
+        y_smoothed[-half_window:] = y_clean[-half_window:]
+    else:
+        y_smoothed = y_clean
+    
+    # 2. 创建目标x值（重采样）
+    x_min, x_max = x_clean[0], x_clean[-1]
+    new_x_values = np.arange(x_min, x_max + target_step, target_step)
+    
+    # 3. 对每个新的x值，使用附近的数据点进行加权平均
+    new_y_values = []
+    
+    for new_x in new_x_values:
+        # 找到附近的点进行加权平均
+        distances = np.abs(x_clean - new_x)
+        
+        # 使用高斯权重，距离越近权重越大
+        weights = np.exp(-distances**2 / (2 * (target_step/2)**2))
+        
+        # 只考虑距离在target_step范围内的点
+        nearby_mask = distances <= target_step
+        if np.sum(nearby_mask) > 0:
+            nearby_weights = weights[nearby_mask]
+            nearby_y = y_smoothed[nearby_mask]
+            
+            # 加权平均
+            weighted_y = np.average(nearby_y, weights=nearby_weights)
+            new_y_values.append(weighted_y)
+        else:
+            # 如果没有附近的点，使用最近的点
+            closest_idx = np.argmin(distances)
+            new_y_values.append(y_smoothed[closest_idx])
+    
+    return new_x_values, np.array(new_y_values)
+
+
+def apply_final_smooth(y_values, method='savgol', window=5):
+    """
+    对重采样后的数据进行最终平滑
+    
+    Args:
+        y_values: 重采样后的y值
+        method: 平滑方法 ('savgol', 'moving_avg', 'none')
+        window: 平滑窗口
+    
+    Returns:
+        平滑后的y值
+    """
+    if len(y_values) < window or method == 'none':
+        return y_values
+    
+    if method == 'moving_avg':
+        # 移动平均
+        kernel = np.ones(window) / window
+        smoothed = np.convolve(y_values, kernel, mode='same')
+    elif method == 'savgol':
+        # Savitzky-Golay滤波（需要scipy）
+        try:
+            from scipy.signal import savgol_filter
+            # 确保window是奇数且小于数据长度
+            actual_window = min(window if window % 2 == 1 else window-1, len(y_values)-1)
+            if actual_window >= 3:
+                smoothed = savgol_filter(y_values, actual_window, 2)
+            else:
+                smoothed = y_values
+        except ImportError:
+            # 如果没有scipy，使用移动平均
+            kernel = np.ones(window) / window
+            smoothed = np.convolve(y_values, kernel, mode='same')
+    else:
+        smoothed = y_values
+    
+    return smoothed
+
+
+# =====================================
 # 工具函数
 # =====================================
 
@@ -806,13 +918,19 @@ def simplify_label(combo_label: str) -> str:
 
 
 def plot_results_with_manager(data_manager: ExperimentDataManager, 
-                            plot_type: str) -> None:
+                            plot_type: str,
+                            enable_smoothing: bool = True,
+                            target_step: int = 2,
+                            smooth_method: str = 'savgol') -> None:
     """
     使用数据管理器绘制实验结果图表
     
     Args:
         data_manager: 数据管理器实例  
         plot_type: 'zealot_numbers' 或 'morality_ratios'
+        enable_smoothing: 是否启用平滑和重采样
+        target_step: 重采样的目标步长（比如从步长1变为步长2）
+        smooth_method: 平滑方法 ('savgol', 'moving_avg', 'none')
     """
     # 从数据管理器获取绘图数据
     all_results, x_values, total_runs_per_combination = data_manager.convert_to_plotting_format(plot_type)
@@ -861,7 +979,10 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
     
     # 为每个指标生成高质量的 mean plots
     for metric in metrics:
-        print(f"  Generating high-quality mean plot for {metric_labels[metric]}...")
+        if enable_smoothing:
+            print(f"  Generating smoothed plot for {metric_labels[metric]} (step={target_step}, method={smooth_method})...")
+        else:
+            print(f"  Generating high-quality mean plot for {metric_labels[metric]}...")
         
         # 预处理数据：计算均值和标准差（为error bands做准备）
         processed_data = {}
@@ -976,8 +1097,27 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                 original_combo_label = display_label
                 runs_info = total_runs_per_combination.get(display_label, 0)
             
-            short_label = simplify_label(display_label)
-            label_with_runs = f"{short_label} (n={runs_info})"
+            # 应用平滑和重采样
+            if enable_smoothing:
+                smoothed_x, smoothed_means = resample_and_smooth_data(
+                    np.array(x_values), data['means'], 
+                    target_step=target_step, 
+                    smooth_window=3
+                )
+                
+                # 最终平滑
+                final_means = apply_final_smooth(smoothed_means, method=smooth_method, window=5)
+                
+                # 使用平滑后的数据
+                plot_x, plot_y = smoothed_x, final_means
+                
+                # 同时更新标签显示平滑信息
+                short_label = simplify_label(display_label)
+                label_with_runs = f"{short_label} (n={runs_info}, smoothed)"
+            else:
+                plot_x, plot_y = np.array(x_values), data['means']
+                short_label = simplify_label(display_label)
+                label_with_runs = f"{short_label} (n={runs_info})"
             
             # 为不同类型的 variance per identity 图表选择合适的样式配置函数
             if metric == 'variance_per_identity_combined':
@@ -991,7 +1131,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             line_color = style.get('color', 'blue')
             
             # 绘制主要的均值曲线
-            plt.plot(x_values, data['means'], label=label_with_runs, 
+            plt.plot(plot_x, plot_y, label=label_with_runs, 
                     color=line_color,
                     linestyle=style.get('linestyle', '-'),
                     marker=style.get('marker', 'o'), 
@@ -999,7 +1139,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                     markeredgewidth=2, markeredgecolor='white')
             
             # 为 zealot_numbers 添加 error bands（标准差范围）
-            if plot_type == 'zealot_numbers' and 'stds' in data:
+            if plot_type == 'zealot_numbers' and 'stds' in data and not enable_smoothing:
                 means = data['means']
                 stds = data['stds']
                 
@@ -1046,11 +1186,17 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
         
-        # 为zealot_numbers添加error_bands标识到文件名
-        if plot_type == 'zealot_numbers':
-            filename = f"{plot_type}_{metric}_mean_with_error_bands{runs_suffix}.png"
+        # 为文件名添加平滑标识
+        if enable_smoothing:
+            if plot_type == 'zealot_numbers':
+                filename = f"{plot_type}_{metric}_smoothed_step{target_step}_{smooth_method}{runs_suffix}.png"
+            else:
+                filename = f"{plot_type}_{metric}_smoothed_step{target_step}_{smooth_method}{runs_suffix}.png"
         else:
-            filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
+            if plot_type == 'zealot_numbers':
+                filename = f"{plot_type}_{metric}_mean_with_error_bands{runs_suffix}.png"
+            else:
+                filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
         filepath = os.path.join(plot_folders['mean'], filename)
         
         # 高质量PNG保存 (DPI 300)
@@ -1204,14 +1350,22 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print("\n" + data_manager.export_summary_report())
 
 
-def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis"):
+def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis",
+                             enable_smoothing: bool = True,
+                             target_step: int = 2,
+                             smooth_method: str = 'savgol'):
     """
     从新的数据管理器中读取数据并生成图表（第二部分）
     
     Args:
-    output_dir: 输出目录
+        output_dir: 输出目录
+        enable_smoothing: 是否启用平滑处理
+        target_step: 重采样步长（2表示从101个点变为51个点）
+        smooth_method: 平滑方法 ('savgol', 'moving_avg', 'none')
     """
     print("📊 Generating Plots from Data Manager")
+    if enable_smoothing:
+        print(f"🎯 Smoothing enabled: step={target_step}, method={smooth_method}")
     print("=" * 70)
     
     start_time = time.time()
@@ -1226,7 +1380,8 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     print("\n📈 Generating Zealot Numbers Plots...")
     zealot_summary = data_manager.get_experiment_summary('zealot_numbers')
     if zealot_summary['total_records'] > 0:
-        plot_results_with_manager(data_manager, 'zealot_numbers')
+        plot_results_with_manager(data_manager, 'zealot_numbers', 
+                                enable_smoothing, target_step, smooth_method)
         print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots")
     else:
         print("❌ No zealot numbers data found")
@@ -1235,7 +1390,8 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     print("\n📈 Generating Morality Ratios Plots...")
     morality_summary = data_manager.get_experiment_summary('morality_ratios')
     if morality_summary['total_records'] > 0:
-        plot_results_with_manager(data_manager, 'morality_ratios')
+        plot_results_with_manager(data_manager, 'morality_ratios',
+                                enable_smoothing, target_step, smooth_method)
         print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots")
     else:
         print("❌ No morality ratios data found")
@@ -1247,6 +1403,8 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     print("\n" + "=" * 70)
     print("🎉 Plot Generation Completed Successfully!")
     print(f"📊 Generated plots from Parquet data files")
+    if enable_smoothing:
+        print(f"🎯 Applied smoothing: original data → step {target_step} resampled")
     print(f"⏱️  Total plotting time: {format_duration(elapsed_time)}")
     print(f"📁 Plots saved to: {output_dir}/mean_plots/")
 
@@ -1401,7 +1559,12 @@ if __name__ == "__main__":
 
     plotting_start_time = time.time()
 
-    plot_from_accumulated_data("results/zealot_morality_analysis")
+    plot_from_accumulated_data(
+        output_dir="results/zealot_morality_analysis",
+        enable_smoothing=True,      # 启用平滑
+        target_step=2,             # 从步长1重采样到步长2（101个点→51个点）
+        smooth_method='savgol'     # 使用Savitzky-Golay平滑
+    )
     
     plotting_end_time = time.time()
     plotting_duration = plotting_end_time - plotting_start_time
