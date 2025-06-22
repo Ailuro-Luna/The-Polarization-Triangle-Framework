@@ -863,7 +863,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
     for metric in metrics:
         print(f"  Generating high-quality mean plot for {metric_labels[metric]}...")
         
-        # 预处理数据：计算均值
+        # 预处理数据：计算均值和标准差（为error bands做准备）
         processed_data = {}
         
         if metric == 'variance_per_identity_combined':
@@ -871,32 +871,38 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             for combo_label, results in all_results.items():
                 # 处理 identity=1 的数据
                 metric_data_1 = results['variance_per_identity_1']
-                means_1 = []
+                means_1, stds_1 = [], []
                 for i, x_runs in enumerate(metric_data_1):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means_1.append(np.mean(valid_runs))
+                        stds_1.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
                     else:
                         means_1.append(np.nan)
+                        stds_1.append(np.nan)
                 
                 # 处理 identity=-1 的数据
                 metric_data_neg1 = results['variance_per_identity_-1']
-                means_neg1 = []
+                means_neg1, stds_neg1 = [], []
                 for i, x_runs in enumerate(metric_data_neg1):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means_neg1.append(np.mean(valid_runs))
+                        stds_neg1.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
                     else:
                         means_neg1.append(np.nan)
+                        stds_neg1.append(np.nan)
                 
                 # 创建两条线的数据
                 processed_data[f"{combo_label} (ID=+1)"] = {
                     'means': np.array(means_1),
+                    'stds': np.array(stds_1),
                     'identity': '+1',
                     'base_combo': combo_label
                 }
                 processed_data[f"{combo_label} (ID=-1)"] = {
                     'means': np.array(means_neg1),
+                    'stds': np.array(stds_neg1),
                     'identity': '-1',
                     'base_combo': combo_label
                 }
@@ -906,39 +912,48 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             
             for combo_label, results in all_results.items():
                 metric_data = results[metric]
-                means = []
+                means, stds = [], []
                 
                 for i, x_runs in enumerate(metric_data):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means.append(np.mean(valid_runs))
+                        stds.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
                     else:
                         means.append(np.nan)
+                        stds.append(np.nan)
                 
                 # 为 variance per identity 创建带身份标识的标签
                 identity_label = f"{combo_label} (ID={identity_suffix})"
                 processed_data[identity_label] = {
-                    'means': np.array(means)
+                    'means': np.array(means),
+                    'stds': np.array(stds)
                 }
         else:
-            # 对于其他指标，保持原有处理方式
+            # 对于其他指标，计算均值和标准差
             for combo_label, results in all_results.items():
                 metric_data = results[metric]
-                means = []
+                means, stds = [], []
                 
                 for i, x_runs in enumerate(metric_data):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means.append(np.mean(valid_runs))
+                        stds.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
                     else:
                         means.append(np.nan)
+                        stds.append(np.nan)
                 
                 processed_data[combo_label] = {
-                    'means': np.array(means)
+                    'means': np.array(means),
+                    'stds': np.array(stds)
                 }
         
         # 添加运行次数信息到标题（显示总run数）
-        title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
+        if plot_type == 'zealot_numbers':
+            title_suffix = f" with Error Bands ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" with Error Bands ({min_runs} total runs)"
+        else:
+            title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
         
         # 高质量均值曲线图
         # 对于 variance per identity，使用更大的图表以容纳更多线条
@@ -972,12 +987,30 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             else:
                 style = style_config.get(display_label, {})
             
+            # 获取颜色和样式
+            line_color = style.get('color', 'blue')
+            
+            # 绘制主要的均值曲线
             plt.plot(x_values, data['means'], label=label_with_runs, 
-                    color=style.get('color', 'blue'),
+                    color=line_color,
                     linestyle=style.get('linestyle', '-'),
                     marker=style.get('marker', 'o'), 
                     linewidth=3.5, markersize=style.get('markersize', 10), alpha=0.85,
                     markeredgewidth=2, markeredgecolor='white')
+            
+            # 为 zealot_numbers 添加 error bands（标准差范围）
+            if plot_type == 'zealot_numbers' and 'stds' in data:
+                means = data['means']
+                stds = data['stds']
+                
+                # 计算上下边界
+                upper_bound = means + stds
+                lower_bound = means - stds
+                
+                # 绘制 error bands（使用相同颜色但透明度较低）
+                plt.fill_between(x_values, lower_bound, upper_bound, 
+                               color=line_color, alpha=0.2, 
+                               linewidth=0, interpolate=True)
         
         plt.xlabel(x_label, fontsize=16)
         plt.ylabel(metric_labels[metric], fontsize=16)
@@ -1013,7 +1046,11 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
         
-        filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
+        # 为zealot_numbers添加error_bands标识到文件名
+        if plot_type == 'zealot_numbers':
+            filename = f"{plot_type}_{metric}_mean_with_error_bands{runs_suffix}.png"
+        else:
+            filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
         filepath = os.path.join(plot_folders['mean'], filename)
         
         # 高质量PNG保存 (DPI 300)
