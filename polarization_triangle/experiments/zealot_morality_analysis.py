@@ -1357,9 +1357,12 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     """
     从新的数据管理器中读取数据并生成图表（第二部分）
     
+    注意：zealot_numbers图表将强制关闭平滑以显示error bands，
+         morality_ratios图表将使用用户指定的平滑设置
+    
     Args:
         output_dir: 输出目录
-        enable_smoothing: 是否启用平滑处理
+        enable_smoothing: 是否启用平滑处理（仅影响morality_ratios图表）
         target_step: 重采样步长（2表示从101个点变为51个点）
         smooth_method: 平滑方法 ('savgol', 'moving_avg', 'none')
     """
@@ -1376,23 +1379,26 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     # 显示数据摘要
     print("\n" + data_manager.export_summary_report())
     
-    # 生成zealot numbers图表
+    # 生成zealot numbers图表（关闭平滑以显示error bands）
     print("\n📈 Generating Zealot Numbers Plots...")
     zealot_summary = data_manager.get_experiment_summary('zealot_numbers')
     if zealot_summary['total_records'] > 0:
         plot_results_with_manager(data_manager, 'zealot_numbers', 
-                                enable_smoothing, target_step, smooth_method)
-        print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots")
+                                False, target_step, smooth_method)  # 强制关闭平滑
+        print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots with error bands")
     else:
         print("❌ No zealot numbers data found")
     
-    # 生成morality ratios图表
+    # 生成morality ratios图表（保持用户设置的平滑选项）
     print("\n📈 Generating Morality Ratios Plots...")
     morality_summary = data_manager.get_experiment_summary('morality_ratios')
     if morality_summary['total_records'] > 0:
         plot_results_with_manager(data_manager, 'morality_ratios',
                                 enable_smoothing, target_step, smooth_method)
-        print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots")
+        if enable_smoothing:
+            print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots with smoothing")
+        else:
+            print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots without smoothing")
     else:
         print("❌ No morality ratios data found")
     
@@ -1403,8 +1409,11 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     print("\n" + "=" * 70)
     print("🎉 Plot Generation Completed Successfully!")
     print(f"📊 Generated plots from Parquet data files")
+    print(f"📈 Zealot Numbers: Error bands enabled (smoothing disabled)")
     if enable_smoothing:
-        print(f"🎯 Applied smoothing: original data → step {target_step} resampled")
+        print(f"📈 Morality Ratios: Smoothing enabled (step {target_step}, {smooth_method})")
+    else:
+        print(f"📈 Morality Ratios: Smoothing disabled")
     print(f"⏱️  Total plotting time: {format_duration(elapsed_time)}")
     print(f"📁 Plots saved to: {output_dir}/mean_plots/")
 
