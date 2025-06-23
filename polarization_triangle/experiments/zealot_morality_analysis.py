@@ -185,16 +185,16 @@ def run_single_simulation_task(task_params):
     
     Args:
         task_params: 包含任务参数的元组
-            (plot_type, combination, x_val, run_idx, steps, process_id)
+            (plot_type, combination, x_val, run_idx, steps, process_id, batch_seed)
     
     Returns:
         tuple: (x_val, run_idx, results_dict, success, error_msg)
     """
     try:
-        plot_type, combination, x_val, run_idx, steps, process_id = task_params
+        plot_type, combination, x_val, run_idx, steps, process_id, batch_seed = task_params
         
-        # 设置进程特定的随机种子
-        np.random.seed((int(x_val * 1000) + run_idx + process_id) % (2**32))
+        # 设置进程特定的随机种子，加入批次标识确保不同批次产生不同结果
+        np.random.seed((int(x_val * 1000) + run_idx + process_id + batch_seed) % (2**32))
         
         # 构建配置
         base_config = copy.deepcopy(high_polarization_config)
@@ -407,7 +407,8 @@ def run_single_simulation(config: SimulationConfig, steps: int = 500) -> Dict[st
 
 
 def run_parameter_sweep(plot_type: str, combination: Dict[str, Any], 
-                       x_values: List[float], num_runs: int = 5, num_processes: int = 1) -> Dict[str, List[List[float]]]:
+                       x_values: List[float], num_runs: int = 5, num_processes: int = 1, 
+                       batch_seed: int = 0) -> Dict[str, List[List[float]]]:
     """
     对特定参数组合进行参数扫描实验
     
@@ -430,6 +431,7 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
         x_values (List[float]): x轴扫描的取值列表，如 [0, 1, 2, ...]
         num_runs (int, optional): 每个x值点重复运行次数. Defaults to 5.
         num_processes (int, optional): 并行进程数，1表示串行执行. Defaults to 1.
+        batch_seed (int, optional): 批次种子，确保不同批次产生不同结果. Defaults to 0.
     
     Returns:
         Dict[str, List[List[float]]]: 嵌套的结果数据结构
@@ -446,13 +448,13 @@ def run_parameter_sweep(plot_type: str, combination: Dict[str, Any],
     """
     # 选择串行或并行执行
     if num_processes == 1:
-        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs)
+        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs, batch_seed)
     else:
-        return run_parameter_sweep_parallel(plot_type, combination, x_values, num_runs, num_processes)
+        return run_parameter_sweep_parallel(plot_type, combination, x_values, num_runs, num_processes, batch_seed)
 
 
 def run_parameter_sweep_serial(plot_type: str, combination: Dict[str, Any], 
-                              x_values: List[float], num_runs: int = 5) -> Dict[str, List[List[float]]]:
+                              x_values: List[float], num_runs: int = 5, batch_seed: int = 0) -> Dict[str, List[List[float]]]:
     """
     串行版本的参数扫描（原有逻辑）
     """
@@ -506,6 +508,9 @@ def run_parameter_sweep_serial(plot_type: str, combination: Dict[str, Any],
         # 运行多次模拟
         for run in range(num_runs):
             try:
+                # 设置随机种子，加入批次标识确保不同批次产生不同结果
+                np.random.seed((int(x_val * 1000) + run + batch_seed) % (2**32))
+                
                 stats = run_single_simulation(current_config)
                 # 处理基础指标
                 for metric in ['mean_opinion', 'variance', 'identity_opinion_difference', 'polarization_index']:
@@ -528,7 +533,8 @@ def run_parameter_sweep_serial(plot_type: str, combination: Dict[str, Any],
 
 
 def run_parameter_sweep_parallel(plot_type: str, combination: Dict[str, Any], 
-                                x_values: List[float], num_runs: int = 5, num_processes: int = 4) -> Dict[str, List[List[float]]]:
+                                x_values: List[float], num_runs: int = 5, num_processes: int = 4, 
+                                batch_seed: int = 0) -> Dict[str, List[List[float]]]:
     """
     并行版本的参数扫描
     """
@@ -539,7 +545,7 @@ def run_parameter_sweep_parallel(plot_type: str, combination: Dict[str, Any],
     for x_val in x_values:
         for run_idx in range(num_runs):
             process_id = len(tasks) % num_processes  # 简单的进程ID分配
-            task = (plot_type, combination, x_val, run_idx, combination['steps'], process_id)
+            task = (plot_type, combination, x_val, run_idx, combination['steps'], process_id, batch_seed)
             tasks.append(task)
     
     print(f"📊 总任务数: {len(tasks)} (x_values: {len(x_values)}, runs_per_x: {num_runs})")
@@ -555,7 +561,7 @@ def run_parameter_sweep_parallel(plot_type: str, combination: Dict[str, Any],
                     pbar.update(1)
     except Exception as e:
         print(f"❌ 并行计算失败，回退到串行模式: {e}")
-        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs)
+        return run_parameter_sweep_serial(plot_type, combination, x_values, num_runs, batch_seed)
     
     # 整理结果
     return organize_parallel_results(results_list, x_values, num_runs)
@@ -1299,6 +1305,9 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     if not batch_name:
         batch_name = time.strftime("%Y%m%d_%H%M%S")
     
+    # 生成批次种子，确保不同批次产生不同的随机结果
+    batch_seed = int(time.time() * 1000) % (2**31)  # 使用时间戳生成种子
+    
     print(f"📊 Batch Configuration:")
     print(f"   Batch name: {batch_name}")
     print(f"   Number of runs this batch: {num_runs}")
@@ -1320,7 +1329,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     for combo in combinations['zealot_numbers']:
         print(f"Running combination: {combo['label']}")
-        results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs, num_processes)
+        results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs, num_processes, batch_seed)
         zealot_results[combo['label']] = results
     
     # 使用新的数据管理器保存zealot numbers的数据
@@ -1353,7 +1362,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     for combo in combinations['morality_ratios']:
         print(f"Running combination: {combo['label']}")
-        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes)
+        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes, batch_seed)
         morality_results[combo['label']] = results
     
     # 使用新的数据管理器保存morality ratio的数据
@@ -1531,6 +1540,9 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     if not batch_name:
         batch_name = f"no_zealot_{time.strftime('%Y%m%d_%H%M%S')}"
     
+    # 生成批次种子，确保不同批次产生不同的随机结果
+    batch_seed = int(time.time() * 1000) % (2**31)  # 使用时间戳生成种子
+    
     print(f"📊 No Zealot Batch Configuration:")
     print(f"   Batch name: {batch_name}")
     print(f"   Number of runs this batch: {num_runs}")
@@ -1549,7 +1561,7 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     
     for combo in no_zealot_combinations:
         print(f"Running no-zealot combination: {combo['label']}")
-        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes)
+        results = run_parameter_sweep('morality_ratios', combo, morality_x_values, num_runs, num_processes, batch_seed)
         morality_results[combo['label']] = results
     
     # 使用新的数据管理器保存 no zealot morality ratio 数据
@@ -1626,7 +1638,7 @@ if __name__ == "__main__":
 
     plot_from_accumulated_data(
         output_dir="results/zealot_morality_analysis",
-        enable_smoothing=True,      # 启用平滑
+        enable_smoothing=True,       # 启用平滑
         target_step=2,             # 从步长1重采样到步长2（101个点→51个点）
         smooth_method='savgol'     # 使用Savitzky-Golay平滑
     )
@@ -1642,7 +1654,7 @@ if __name__ == "__main__":
     print("\n" + "🕒" * 50)
     print("⏱️  完整实验耗时总结")
     print("🕒" * 50)
-    # print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
+    print(f"📊 数据收集阶段耗时: {format_duration(data_collection_duration)}")
     print(f"📈 图表生成阶段耗时: {format_duration(plotting_duration)}")
     print(f"🎯 总耗时: {format_duration(total_duration)}")
     print("🕒" * 50) 
