@@ -812,13 +812,34 @@ def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict
     Returns:
         dict: 样式配置
     """
-    # 扩展颜色调色板以支持更多线条
+    # 扩展颜色调色板（去重并确保足够的颜色）
     colors = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
         '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78',
         '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d',
-        '#9edae5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+        '#9edae5', '#ff1744', '#00e676', '#ffea00', '#651fff', '#ff6f00',
+        '#00bcd4', '#795548', '#607d8b', '#e91e63', '#4caf50', '#ffc107'
     ]
+    
+    # 预定义的标签到颜色索引的映射（避免哈希冲突）
+    label_color_mapping = {
+        # morality_ratios 实验的10个基础标签
+        'Random, ID-align=True, ID-cluster=False': 0,
+        'Random, ID-align=True, ID-cluster=True': 1,
+        'Random, ID-align=False, ID-cluster=False': 2,
+        'Random, ID-align=False, ID-cluster=True': 3,
+        'Clustered, ID-align=True, ID-cluster=False': 4,
+        'Clustered, ID-align=True, ID-cluster=True': 5,
+        'Clustered, ID-align=False, ID-cluster=False': 6,
+        'Clustered, ID-align=False, ID-cluster=True': 7,
+        'None, ID-cluster=False': 8,
+        'None, ID-cluster=True': 9,
+        # zealot_numbers 实验的4个基础标签
+        'Random Zealots, Morality=0.0': 10,
+        'Random Zealots, Morality=0.3': 11,
+        'Clustered Zealots, Morality=0.0': 12,
+        'Clustered Zealots, Morality=0.3': 13,
+    }
     
     # 线型组合：实线用于 ID=1，虚线用于 ID=-1
     linestyles = {
@@ -838,12 +859,19 @@ def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict
     # 提取原始组合标签
     base_label = identity_label.split(' (ID=')[0]
     
-    # 计算颜色索引（基于原始组合标签的哈希值）
-    color_index = abs(hash(base_label)) % len(colors)
+    # 使用预定义的映射或回退到哈希方法
+    if base_label in label_color_mapping:
+        base_color_index = label_color_mapping[base_label]
+    else:
+        # 回退到哈希方法（用于未预定义的标签）
+        base_color_index = abs(hash(base_label)) % len(colors)
     
-    # 为 ID=-1 使用稍微不同的颜色（调整亮度）
+    # 为ID=-1组选择不同的颜色（确保无冲突）
     if identity_val == '-1':
-        color_index = (color_index + len(colors) // 2) % len(colors)
+        # 对于ID=-1，使用一个固定的偏移量确保不重复
+        color_index = (base_color_index + 15) % len(colors)
+    else:
+        color_index = base_color_index
     
     return {
         'color': colors[color_index],
@@ -867,13 +895,34 @@ def get_combined_variance_per_identity_style(identity_label: str, plot_type: str
     Returns:
         dict: 样式配置
     """
-    # 扩展颜色调色板
+    # 使用与单独函数相同的扩展颜色调色板（去重并确保足够的颜色）
     colors = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
         '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78',
         '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d',
-        '#9edae5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+        '#9edae5', '#ff1744', '#00e676', '#ffea00', '#651fff', '#ff6f00',
+        '#00bcd4', '#795548', '#607d8b', '#e91e63', '#4caf50', '#ffc107'
     ]
+    
+    # 使用与单独函数相同的预定义映射
+    label_color_mapping = {
+        # morality_ratios 实验的10个基础标签
+        'Random, ID-align=True, ID-cluster=False': 0,
+        'Random, ID-align=True, ID-cluster=True': 1,
+        'Random, ID-align=False, ID-cluster=False': 2,
+        'Random, ID-align=False, ID-cluster=True': 3,
+        'Clustered, ID-align=True, ID-cluster=False': 4,
+        'Clustered, ID-align=True, ID-cluster=True': 5,
+        'Clustered, ID-align=False, ID-cluster=False': 6,
+        'Clustered, ID-align=False, ID-cluster=True': 7,
+        'None, ID-cluster=False': 8,
+        'None, ID-cluster=True': 9,
+        # zealot_numbers 实验的4个基础标签
+        'Random Zealots, Morality=0.0': 10,
+        'Random Zealots, Morality=0.3': 11,
+        'Clustered Zealots, Morality=0.0': 12,
+        'Clustered Zealots, Morality=0.3': 13,
+    }
     
     # 提取身份值（+1 或 -1）
     identity_val = identity_label.split('(ID=')[-1].rstrip(')')
@@ -881,15 +930,22 @@ def get_combined_variance_per_identity_style(identity_label: str, plot_type: str
     # 提取原始组合标签
     base_label = identity_label.split(' (ID=')[0]
     
-    # 基于原始组合标签计算颜色索引（确保相同配置使用相同颜色）
-    color_index = abs(hash(base_label)) % len(colors)
+    # 使用预定义的映射或回退到哈希方法
+    if base_label in label_color_mapping:
+        color_index = label_color_mapping[base_label]
+    else:
+        # 回退到哈希方法（用于未预定义的标签）
+        color_index = abs(hash(base_label)) % len(colors)
     
     # 线型：+1 用实线，-1 用虚线
     linestyle = '-' if identity_val == '+1' else '--'
     
-    # 标记：相同配置使用相同标记
+    # 标记：使用预定义映射确保一致性
     markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
-    marker_index = abs(hash(base_label)) % len(markers)
+    if base_label in label_color_mapping:
+        marker_index = label_color_mapping[base_label] % len(markers)
+    else:
+        marker_index = abs(hash(base_label)) % len(markers)
     marker = markers[marker_index]
     
     # 标记大小：+1 稍大，-1 稍小
@@ -1259,7 +1315,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     plot1_start_time = time.time()
     
-    zealot_x_values = list(range(0, max_zealots + 1, 1))  # 0, 1, 2, ..., n
+    zealot_x_values = list(range(0, max_zealots + 1, 2))  # 0, 1, 2, ..., n
     zealot_results = {}
     
     for combo in combinations['zealot_numbers']:
@@ -1292,7 +1348,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     
     plot2_start_time = time.time()
     
-    morality_x_values = list(range(0, max_morality + 1, 1))  # 0, 1, 2, ..., n
+    morality_x_values = list(range(0, max_morality + 1, 2))  # 0, 1, 2, ..., n
     morality_results = {}
     
     for combo in combinations['morality_ratios']:
@@ -1553,7 +1609,7 @@ if __name__ == "__main__":
     # 可以多次运行以下命令来积累数据：
     run_and_accumulate_data(
         output_dir="results/zealot_morality_analysis",
-        num_runs=100,  # 每次运行100轮测试
+        num_runs=200,  # 每次运行200轮测试
         max_zealots=100,  
         max_morality=100,
         # batch_name="batch_001"  # 可选：给批次命名

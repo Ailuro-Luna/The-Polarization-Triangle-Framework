@@ -12,7 +12,7 @@ comparison_results/
 .git/
 
 # 其他大型二进制文件或文件夹
-*.png
+# *.png
 *.jpg
 *.jpeg
 *.pdf 
