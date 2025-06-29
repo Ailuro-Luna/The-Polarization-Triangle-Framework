@@ -1318,38 +1318,38 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"   Storage format: Parquet (optimized for space and speed)")
     print()
     
-    # === 处理图1：x轴为zealot numbers ===
-    print("📈 Running Test Type 1: Zealot Numbers Analysis")
-    print("-" * 50)
+    # # === 处理图1：x轴为zealot numbers ===
+    # print("📈 Running Test Type 1: Zealot Numbers Analysis")
+    # print("-" * 50)
     
-    plot1_start_time = time.time()
+    # plot1_start_time = time.time()
     
-    zealot_x_values = list(range(0, max_zealots + 1, 2))  # 0, 1, 2, ..., n
-    zealot_results = {}
+    # zealot_x_values = list(range(0, max_zealots + 1, 2))  # 0, 1, 2, ..., n
+    # zealot_results = {}
     
-    for combo in combinations['zealot_numbers']:
-        print(f"Running combination: {combo['label']}")
-        results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs, num_processes, batch_seed)
-        zealot_results[combo['label']] = results
+    # for combo in combinations['zealot_numbers']:
+    #     print(f"Running combination: {combo['label']}")
+    #     results = run_parameter_sweep('zealot_numbers', combo, zealot_x_values, num_runs, num_processes, batch_seed)
+    #     zealot_results[combo['label']] = results
     
-    # 使用新的数据管理器保存zealot numbers的数据
-    zealot_batch_metadata = {
-        'batch_id': batch_name,
-        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
-        'experiment_type': 'zealot_numbers',
-        'num_runs': num_runs,
-        'max_zealots': max_zealots,
-        'x_range': [0, max_zealots],
-        'combinations_count': len(combinations['zealot_numbers'])
-    }
+    # # 使用新的数据管理器保存zealot numbers的数据
+    # zealot_batch_metadata = {
+    #     'batch_id': batch_name,
+    #     'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+    #     'experiment_type': 'zealot_numbers',
+    #     'num_runs': num_runs,
+    #     'max_zealots': max_zealots,
+    #     'x_range': [0, max_zealots],
+    #     'combinations_count': len(combinations['zealot_numbers'])
+    # }
     
-    save_data_with_manager(data_manager, 'zealot_numbers', zealot_x_values, zealot_results, zealot_batch_metadata)
+    # save_data_with_manager(data_manager, 'zealot_numbers', zealot_x_values, zealot_results, zealot_batch_metadata)
     
-    plot1_end_time = time.time()
-    plot1_duration = plot1_end_time - plot1_start_time
+    # plot1_end_time = time.time()
+    # plot1_duration = plot1_end_time - plot1_start_time
     
-    print(f"⏱️  Test Type 1 completed in: {format_duration(plot1_duration)}")
-    print()
+    # print(f"⏱️  Test Type 1 completed in: {format_duration(plot1_duration)}")
+    # print()
     
     # === 处理图2：x轴为morality ratio ===
     print("📈 Running Test Type 2: Morality Ratio Analysis")
@@ -1395,7 +1395,7 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
     print(f"📊 Batch '{batch_name}' with {num_runs} runs per parameter point")
     print()
     print("⏱️  Timing Summary:")
-    print(f"   Test Type 1 (Zealot Numbers): {format_duration(plot1_duration)}")
+    # print(f"   Test Type 1 (Zealot Numbers): {format_duration(plot1_duration)}")
     print(f"   Test Type 2 (Morality Ratios): {format_duration(plot2_duration)}")
     print(f"   Total execution time: {format_duration(elapsed_time)}")
     print(f"📁 Data saved using Parquet format in: {output_dir}/")
@@ -1638,7 +1638,7 @@ if __name__ == "__main__":
 
     plot_from_accumulated_data(
         output_dir="results/zealot_morality_analysis",
-        enable_smoothing=True,       # 启用平滑
+        enable_smoothing=False,       # 不启用平滑
         target_step=2,             # 从步长1重采样到步长2（101个点→51个点）
         smooth_method='savgol'     # 使用Savitzky-Golay平滑
     )

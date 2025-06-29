@@ -25,7 +25,7 @@ class Simulation:
         # 获取邻接矩阵
         self.adj_matrix = nx.adjacency_matrix(self.graph).toarray()
 
-        self.pos = nx.spring_layout(self.graph, k=0.1, iterations=50, scale=2.0, seed=42)
+        self.pos = nx.spring_layout(self.graph, k=0.1, iterations=50, scale=2.0)
 
         # 初始化聚类主导属性
         self.cluster_identity_majority = {}
