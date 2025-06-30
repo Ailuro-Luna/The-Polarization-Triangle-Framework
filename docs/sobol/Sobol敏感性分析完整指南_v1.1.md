@@ -24,7 +24,7 @@
 
 - **🔍 全局敏感性分析**: 基于Sobol方法的参数重要性量化
 - **🚀 高性能计算**: 多进程并行，支持大规模样本分析
-- **📊 丰富的输出指标**: 11种涵盖极化、收敛、动态的关键指标
+- **📊 丰富的输出指标**: 14种涵盖极化、收敛、动态、身份的关键指标
 - **🎨 专业可视化**: 多类型图表，支持高质量输出
 - **🛠️ 易于使用**: 命令行和编程接口双重支持
 - **💾 可靠存储**: 自动保存中间结果，支持断点续算
@@ -102,6 +102,7 @@ python polarization_triangle/scripts/run_sobol_analysis.py --config quick
 2. **收敛指标** (2个)  
 3. **动态指标** (3个)
 4. **身份指标** (2个)
+5. **Variance Per Identity指标** (3个) - 新增
 
 ## 快速开始
 
@@ -146,7 +147,11 @@ print(summary.head(10))
 ### 方法3: 使用示例脚本
 
 ```bash
+# 基础敏感性分析示例
 python polarization_triangle/examples/sobol_sensitivity_example.py
+
+# Variance Per Identity 专门示例 (新增)
+python polarization_triangle/examples/variance_per_identity_example.py
 ```
 
 ## 详细配置
@@ -276,6 +281,23 @@ config = SobolConfig(
 #### 11. cross_identity_correlation (跨身份相关性)
 - **计算方法**: 不同身份群体意见的相关系数
 - **解释**: 身份边界的渗透性
+
+### Variance Per Identity 指标 (新增)
+
+#### 12. variance_per_identity_1 (身份群体1方差)
+- **计算方法**: `np.var(identity_1_opinions)` (排除zealot)
+- **取值范围**: [0, 1]
+- **解释**: identity=1群体内部的意见分化程度，高值表示群体内部意见分歧较大
+
+#### 13. variance_per_identity_neg1 (身份群体-1方差)
+- **计算方法**: `np.var(identity_neg1_opinions)` (排除zealot)
+- **取值范围**: [0, 1]
+- **解释**: identity=-1群体内部的意见分化程度，高值表示群体内部意见分歧较大
+
+#### 14. variance_per_identity_mean (身份群体平均方差)
+- **计算方法**: `(variance_identity_1 + variance_identity_neg1) / 2`
+- **取值范围**: [0, 1]
+- **解释**: 两个身份群体方差的均值，反映系统整体的群体内部分化水平
 
 ## 可视化功能
 
@@ -988,6 +1010,10 @@ class SensitivityVisualizer:
 - ✅ **字体兼容性**: 优化中文字体处理，图表标签改为英文，提高跨平台兼容性
 
 #### 📊 功能增强
+- 🆕 **新增指标**: 添加3个 Variance Per Identity 指标，分析不同身份群体内部的意见分化
+  - `variance_per_identity_1`: identity=1群体的意见方差
+  - `variance_per_identity_neg1`: identity=-1群体的意见方差
+  - `variance_per_identity_mean`: 两个群体方差的均值
 - 🆕 **预设配置更新**: 更准确的时间估算和资源配置
 - 🆕 **错误诊断工具**: 新增结果质量验证和问题诊断功能
 - 🆕 **性能监控**: 添加进度条和详细的执行时间报告
@@ -999,9 +1025,10 @@ class SensitivityVisualizer:
 - 🎨 **自动布局**: 改进图表布局和颜色方案
 
 #### 📚 文档完善
-- 📖 **完整示例**: 添加真实运行输出示例
+- 📖 **完整示例**: 添加真实运行输出示例和新指标专门示例
 - 📖 **故障排除**: 详细的问题诊断和解决方案
 - 📖 **最佳实践**: 全面的使用建议和优化指南
+- 📖 **新指标文档**: 详细说明 Variance Per Identity 指标的含义和应用
 
 ### v1.0.0 (初始版本)
 - 🎯 基础Sobol敏感性分析功能

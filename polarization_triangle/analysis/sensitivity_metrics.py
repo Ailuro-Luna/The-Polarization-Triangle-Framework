@@ -38,7 +38,12 @@ class SensitivityMetrics:
             
             # 身份相关指标
             'identity_variance_ratio',
-            'cross_identity_correlation'
+            'cross_identity_correlation',
+            
+            # Variance per identity 指标
+            'variance_per_identity_1',      # identity=1群体的方差
+            'variance_per_identity_neg1',   # identity=-1群体的方差
+            'variance_per_identity_mean'    # 两个群体方差的均值
         ]
     
     def calculate_all_metrics(self, sim: Simulation) -> Dict[str, float]:
@@ -57,6 +62,9 @@ class SensitivityMetrics:
             
             # 身份相关指标
             metrics.update(self._calculate_identity_metrics(sim))
+            
+            # Variance per identity 指标
+            metrics.update(self._calculate_variance_per_identity_metrics(sim))
             
         except Exception as e:
             warnings.warn(f"计算指标时出错: {e}")
@@ -177,6 +185,54 @@ class SensitivityMetrics:
             }
         
         return metrics  
+    
+    def _calculate_variance_per_identity_metrics(self, sim: Simulation) -> Dict[str, float]:
+        """计算 variance per identity 指标"""
+        metrics = {}
+        
+        try:
+            # 获取非zealot节点的意见和身份（排除zealot的影响）
+            # 创建 zealot mask：如果一个agent的ID在 zealot_ids 中，则为True
+            zealot_mask = np.zeros(sim.num_agents, dtype=bool)
+            if hasattr(sim, 'enable_zealots') and sim.enable_zealots and hasattr(sim, 'zealot_ids') and sim.zealot_ids:
+                zealot_mask[sim.zealot_ids] = True
+            
+            non_zealot_mask = ~zealot_mask
+            non_zealot_opinions = sim.opinions[non_zealot_mask]
+            non_zealot_identities = sim.identities[non_zealot_mask]
+            
+            # 分别计算每个身份组的方差
+            variance_identity_1 = 0.0
+            variance_identity_neg1 = 0.0
+            
+            # 计算 identity=1 群体的方差
+            identity_1_mask = non_zealot_identities == 1
+            if np.sum(identity_1_mask) > 1:  # 至少需要2个节点才能计算方差
+                identity_1_opinions = non_zealot_opinions[identity_1_mask]
+                variance_identity_1 = float(np.var(identity_1_opinions))
+            
+            # 计算 identity=-1 群体的方差
+            identity_neg1_mask = non_zealot_identities == -1
+            if np.sum(identity_neg1_mask) > 1:  # 至少需要2个节点才能计算方差
+                identity_neg1_opinions = non_zealot_opinions[identity_neg1_mask]
+                variance_identity_neg1 = float(np.var(identity_neg1_opinions))
+            
+            # 计算两个群体方差的均值
+            variance_mean = (variance_identity_1 + variance_identity_neg1) / 2.0
+            
+            metrics['variance_per_identity_1'] = variance_identity_1
+            metrics['variance_per_identity_neg1'] = variance_identity_neg1
+            metrics['variance_per_identity_mean'] = variance_mean
+            
+        except Exception as e:
+            warnings.warn(f"计算 variance per identity 指标时出错: {e}")
+            metrics = {
+                'variance_per_identity_1': 0.0,
+                'variance_per_identity_neg1': 0.0,
+                'variance_per_identity_mean': 0.0
+            }
+        
+        return metrics
     
     def _calculate_koudenburg_polarization(self, opinions: np.ndarray) -> float:
         """计算Koudenburg极化指数"""
@@ -434,5 +490,8 @@ class SensitivityMetrics:
             'oscillation_frequency': '振荡频率，观点方向改变的频次',
             'group_divergence': '群体分化度，不同身份群体间的意见差异',
             'identity_variance_ratio': '身份方差比，组间方差与组内方差的比值',
-            'cross_identity_correlation': '跨身份相关性，不同身份群体意见的相关系数'
+            'cross_identity_correlation': '跨身份相关性，不同身份群体意见的相关系数',
+            'variance_per_identity_1': '身份群体1方差，identity=1群体内部的意见方差',
+            'variance_per_identity_neg1': '身份群体-1方差，identity=-1群体内部的意见方差',
+            'variance_per_identity_mean': '身份群体平均方差，两个身份群体方差的均值'
         } 

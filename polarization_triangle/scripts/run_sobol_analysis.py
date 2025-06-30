@@ -28,7 +28,7 @@ def create_analysis_configs():
         n_runs=2,
         n_processes=2,
         num_steps=100,
-        output_dir="sobol_results_quick"
+        output_dir="results/sobol_results_quick"
     )
     
     configs['standard'] = SobolConfig(
@@ -36,7 +36,7 @@ def create_analysis_configs():
         n_runs=3,
         n_processes=4,
         num_steps=200,
-        output_dir="sobol_results_standard"
+        output_dir="results/sobol_results_standard"
     )
     
     configs['high_precision'] = SobolConfig(
@@ -44,7 +44,7 @@ def create_analysis_configs():
         n_runs=5,
         n_processes=6,
         num_steps=300,
-        output_dir="sobol_results_high_precision"
+        output_dir="results/sobol_results_high_precision"
     )
 
     # configs['full'] = SobolConfig(
