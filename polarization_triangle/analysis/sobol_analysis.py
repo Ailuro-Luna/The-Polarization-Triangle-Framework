@@ -66,11 +66,17 @@ class SobolConfig:
                     'tau1': 3, 'tau2': 1.5, 'mu': 0.1,
                     'average_degree': 5, 'min_community': 10
                 },
-                opinion_distribution='twin_peak',
-                morality_rate=0.5,
-                cluster_identity=True,
-                cluster_morality=True,
-                cluster_opinion=True
+                opinion_distribution='uniform',
+                morality_rate=0.3,
+                cluster_identity=False,
+                cluster_morality=False,
+                cluster_opinion=False,
+                # Zealot配置
+                zealot_count=30,
+                enable_zealots=True,
+                zealot_mode="random",
+                zealot_morality=True,
+                zealot_identity_allocation=False
             )
 
 
