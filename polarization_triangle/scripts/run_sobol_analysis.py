@@ -58,8 +58,16 @@ def create_analysis_configs():
         n_samples=4096,
         n_runs=50,
         n_processes=8,
-        num_steps=500,
+        num_steps=300,
         output_dir="results/sobol_results_full"
+    )
+
+    configs['test1'] = SobolConfig(
+        n_samples=2048,
+        n_runs=10,
+        n_processes=8,
+        num_steps=300,
+        output_dir="results/sobol_results_test1"
     )
     
     return configs
@@ -213,7 +221,7 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='运行Sobol敏感性分析')
     parser.add_argument('--config', type=str, default='standard', 
-                       choices=['quick', 'standard', 'high_precision', 'full'],
+                       choices=['quick', 'standard', 'high_precision', 'full', 'test1'],
                        help='分析配置类型')
     parser.add_argument('--load', action='store_true', 
                        help='尝试加载已有结果')

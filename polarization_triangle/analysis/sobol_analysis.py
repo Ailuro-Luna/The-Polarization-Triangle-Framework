@@ -34,8 +34,8 @@ class SobolConfig:
     """Sobol敏感性分析配置"""
     # 参数范围定义
     parameter_bounds: Dict[str, List[float]] = field(default_factory=lambda: {
-        'alpha': [0.1, 0.8],        # 自我激活系数
-        'beta': [0.05, 0.3],        # 社会影响系数  
+        'alpha': [0, 1],        # 自我激活系数
+        'beta': [0.0, 0.2],        # 社会影响系数  
         'gamma': [0.2, 2.0],        # 道德化影响系数
         'cohesion_factor': [0.0, 0.5]  # 身份凝聚力因子
     })
@@ -55,7 +55,7 @@ class SobolConfig:
     
     # 分析参数
     confidence_level: float = 0.95   # 置信水平
-    bootstrap_samples: int = 100     # Bootstrap样本数
+    bootstrap_samples: int = 1000     # Bootstrap样本数
 
     def __post_init__(self):
         if self.base_config is None:
@@ -76,7 +76,7 @@ class SobolConfig:
                 enable_zealots=True,
                 zealot_mode="random",
                 zealot_morality=True,
-                zealot_identity_allocation=False
+                zealot_identity_allocation=True
             )
 
 
