@@ -9,6 +9,8 @@ import sys
 import argparse
 import time
 from pathlib import Path
+import json
+from datetime import datetime
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent.parent
@@ -73,6 +75,235 @@ def create_analysis_configs():
     return configs
 
 
+def save_parameter_record(analyzer: SobolAnalyzer, config_name: str, 
+                         start_time: float, end_time: float = None):
+    """保存参数配置记录文件"""
+    
+    print("保存参数配置记录...")
+    
+    # 创建记录文件路径
+    record_file_txt = os.path.join(analyzer.config.output_dir, "parameter_record.txt")
+    record_file_json = os.path.join(analyzer.config.output_dir, "parameter_record.json")
+    
+    # 获取当前时间
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 计算总样本数
+    total_samples = analyzer.config.n_samples * (2 * len(analyzer.param_names) + 2)
+    total_simulations = total_samples * analyzer.config.n_runs
+    total_steps = total_simulations * analyzer.config.num_steps
+    
+    # 准备参数记录数据
+    record_data = {
+        "analysis_info": {
+            "config_name": config_name,
+            "analysis_time": current_time,
+            "start_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)),
+            "end_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)) if end_time else "运行中",
+            "duration_seconds": end_time - start_time if end_time else "运行中",
+            "output_directory": analyzer.config.output_dir
+        },
+        "sobol_analysis_config": {
+            "parameter_bounds": analyzer.config.parameter_bounds,
+            "n_samples": analyzer.config.n_samples,
+            "n_runs": analyzer.config.n_runs,
+            "num_steps": analyzer.config.num_steps,
+            "n_processes": analyzer.config.n_processes,
+            "confidence_level": analyzer.config.confidence_level,
+            "bootstrap_samples": analyzer.config.bootstrap_samples,
+            "save_intermediate": analyzer.config.save_intermediate
+        },
+        "simulation_config": {
+            "num_agents": analyzer.config.base_config.num_agents,
+            "network_type": analyzer.config.base_config.network_type,
+            "network_params": analyzer.config.base_config.network_params,
+            "opinion_distribution": analyzer.config.base_config.opinion_distribution,
+            "morality_rate": analyzer.config.base_config.morality_rate,
+            "cluster_identity": analyzer.config.base_config.cluster_identity,
+            "cluster_morality": analyzer.config.base_config.cluster_morality,
+            "cluster_opinion": analyzer.config.base_config.cluster_opinion,
+            "influence_factor": analyzer.config.base_config.influence_factor,
+            "tolerance": analyzer.config.base_config.tolerance,
+            "delta": analyzer.config.base_config.delta,
+            "u": analyzer.config.base_config.u,
+            "alpha": analyzer.config.base_config.alpha,
+            "beta": analyzer.config.base_config.beta,
+            "gamma": analyzer.config.base_config.gamma
+        },
+        "zealot_config": {
+            "zealot_count": analyzer.config.base_config.zealot_count,
+            "enable_zealots": analyzer.config.base_config.enable_zealots,
+            "zealot_mode": analyzer.config.base_config.zealot_mode,
+            "zealot_opinion": analyzer.config.base_config.zealot_opinion,
+            "zealot_morality": analyzer.config.base_config.zealot_morality,
+            "zealot_identity_allocation": analyzer.config.base_config.zealot_identity_allocation
+        },
+        "computation_complexity": {
+            "analyzed_parameters": analyzer.param_names,
+            "parameter_count": len(analyzer.param_names),
+            "base_samples": analyzer.config.n_samples,
+            "total_samples": total_samples,
+            "runs_per_sample": analyzer.config.n_runs,
+            "total_simulations": total_simulations,
+            "steps_per_simulation": analyzer.config.num_steps,
+            "total_computation_steps": total_steps,
+            "parallel_processes": analyzer.config.n_processes
+        },
+        "output_metrics": {
+            "polarization_metrics": [
+                "polarization_index",
+                "opinion_variance", 
+                "extreme_ratio",
+                "identity_polarization"
+            ],
+            "convergence_metrics": [
+                "mean_abs_opinion",
+                "final_stability"
+            ],
+            "dynamics_metrics": [
+                "trajectory_length",
+                "oscillation_frequency",
+                "group_divergence"
+            ],
+            "identity_metrics": [
+                "identity_variance_ratio",
+                "cross_identity_correlation",
+                "variance_per_identity_1",
+                "variance_per_identity_neg1",
+                "variance_per_identity_mean"
+            ]
+        }
+    }
+    
+    # 保存JSON格式
+    with open(record_file_json, 'w', encoding='utf-8') as f:
+        json.dump(record_data, f, ensure_ascii=False, indent=2)
+    
+    # 保存文本格式（更易读）
+    with open(record_file_txt, 'w', encoding='utf-8') as f:
+        f.write("="*80 + "\n")
+        f.write("Sobol敏感性分析参数配置记录\n")
+        f.write("="*80 + "\n\n")
+        
+        # 分析信息
+        f.write("【分析信息】\n")
+        f.write(f"配置名称: {config_name}\n")
+        f.write(f"分析时间: {current_time}\n")
+        f.write(f"开始时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}\n")
+        if end_time:
+            f.write(f"结束时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}\n")
+            f.write(f"总耗时: {end_time - start_time:.2f} 秒\n")
+        f.write(f"输出目录: {analyzer.config.output_dir}\n\n")
+        
+        # Sobol分析配置
+        f.write("【Sobol敏感性分析配置】\n")
+        f.write(f"基础样本数: {analyzer.config.n_samples}\n")
+        f.write(f"总样本数: {total_samples} (N × (2D + 2))\n")
+        f.write(f"每个样本运行次数: {analyzer.config.n_runs}\n")
+        f.write(f"每次模拟步数: {analyzer.config.num_steps}\n")
+        f.write(f"并行进程数: {analyzer.config.n_processes}\n")
+        f.write(f"置信水平: {analyzer.config.confidence_level}\n")
+        f.write(f"Bootstrap样本数: {analyzer.config.bootstrap_samples}\n")
+        f.write(f"保存中间结果: {analyzer.config.save_intermediate}\n\n")
+        
+        # 敏感性分析参数
+        f.write("【敏感性分析参数及范围】\n")
+        for param, bounds in analyzer.config.parameter_bounds.items():
+            f.write(f"{param}: [{bounds[0]}, {bounds[1]}]\n")
+        f.write("\n")
+        
+        # 网络配置
+        f.write("【网络配置】\n")
+        f.write(f"节点数量: {analyzer.config.base_config.num_agents}\n")
+        f.write(f"网络类型: {analyzer.config.base_config.network_type}\n")
+        f.write("网络参数:\n")
+        for key, value in analyzer.config.base_config.network_params.items():
+            f.write(f"  {key}: {value}\n")
+        f.write("\n")
+        
+        # 模拟配置
+        f.write("【模拟配置】\n")
+        f.write(f"意见分布: {analyzer.config.base_config.opinion_distribution}\n")
+        f.write(f"道德化率: {analyzer.config.base_config.morality_rate}\n")
+        f.write(f"身份聚类: {analyzer.config.base_config.cluster_identity}\n")
+        f.write(f"道德聚类: {analyzer.config.base_config.cluster_morality}\n")
+        f.write(f"意见聚类: {analyzer.config.base_config.cluster_opinion}\n")
+        f.write(f"影响因子: {analyzer.config.base_config.influence_factor}\n")
+        f.write(f"容忍度: {analyzer.config.base_config.tolerance}\n")
+        f.write(f"意见衰减率(δ): {analyzer.config.base_config.delta}\n")
+        f.write(f"意见激活系数(u): {analyzer.config.base_config.u}\n")
+        f.write(f"默认自我激活系数(α): {analyzer.config.base_config.alpha}\n")
+        f.write(f"默认社会影响系数(β): {analyzer.config.base_config.beta}\n")
+        f.write(f"默认道德化影响系数(γ): {analyzer.config.base_config.gamma}\n\n")
+        
+        # Zealot配置
+        f.write("【Zealot配置】\n")
+        f.write(f"Zealot数量: {analyzer.config.base_config.zealot_count}\n")
+        f.write(f"启用Zealot: {analyzer.config.base_config.enable_zealots}\n")
+        f.write(f"Zealot模式: {analyzer.config.base_config.zealot_mode}\n")
+        f.write(f"Zealot意见: {analyzer.config.base_config.zealot_opinion}\n")
+        f.write(f"Zealot道德化: {analyzer.config.base_config.zealot_morality}\n")
+        f.write(f"按身份分配Zealot: {analyzer.config.base_config.zealot_identity_allocation}\n\n")
+        
+        # 计算复杂度
+        f.write("【计算复杂度】\n")
+        f.write(f"分析参数数量: {len(analyzer.param_names)} ({', '.join(analyzer.param_names)})\n")
+        f.write(f"基础样本数: {analyzer.config.n_samples}\n")
+        f.write(f"总样本数: {total_samples}\n")
+        f.write(f"每个样本运行次数: {analyzer.config.n_runs}\n")
+        f.write(f"总模拟运行次数: {total_simulations:,}\n")
+        f.write(f"每次模拟步数: {analyzer.config.num_steps}\n")
+        f.write(f"总计算步数: {total_steps:,}\n")
+        f.write(f"并行进程数: {analyzer.config.n_processes}\n\n")
+        
+        # 输出指标
+        f.write("【输出指标】\n")
+        f.write("极化相关指标:\n")
+        for metric in ["polarization_index", "opinion_variance", "extreme_ratio", "identity_polarization"]:
+            f.write(f"  - {metric}\n")
+        f.write("收敛相关指标:\n")
+        for metric in ["mean_abs_opinion", "final_stability"]:
+            f.write(f"  - {metric}\n")
+        f.write("动态过程指标:\n")
+        for metric in ["trajectory_length", "oscillation_frequency", "group_divergence"]:
+            f.write(f"  - {metric}\n")
+        f.write("身份相关指标:\n")
+        for metric in ["identity_variance_ratio", "cross_identity_correlation", 
+                      "variance_per_identity_1", "variance_per_identity_neg1", "variance_per_identity_mean"]:
+            f.write(f"  - {metric}\n")
+        f.write("\n")
+        
+        # 指标描述
+        f.write("【指标描述】\n")
+        metric_descriptions = {
+            'polarization_index': 'Koudenburg极化指数，衡量系统整体极化程度',
+            'opinion_variance': '意见方差，反映观点分散程度',
+            'extreme_ratio': '极端观点比例，|opinion| > 0.8的Agent比例',
+            'identity_polarization': '身份间极化差异，不同身份群体平均意见的方差',
+            'mean_abs_opinion': '平均绝对意见，系统观点强度',
+            'final_stability': '最终稳定性，最后阶段的变异系数',
+            'trajectory_length': '意见轨迹长度，观点变化的累积距离',
+            'oscillation_frequency': '振荡频率，观点方向改变的频次',
+            'group_divergence': '群体分化度，不同身份群体间的意见差异',
+            'identity_variance_ratio': '身份方差比，组间方差与组内方差的比值',
+            'cross_identity_correlation': '跨身份相关性，不同身份群体意见的相关系数',
+            'variance_per_identity_1': '身份群体1方差，identity=1群体内部的意见方差',
+            'variance_per_identity_neg1': '身份群体-1方差，identity=-1群体内部的意见方差',
+            'variance_per_identity_mean': '身份群体平均方差，两个身份群体方差的均值'
+        }
+        
+        for metric, description in metric_descriptions.items():
+            f.write(f"{metric}: {description}\n")
+        
+        f.write("\n" + "="*80 + "\n")
+        f.write("记录生成完成\n")
+        f.write("="*80 + "\n")
+    
+    print(f"参数记录已保存到:")
+    print(f"  - {record_file_txt}")
+    print(f"  - {record_file_json}")
+
+
 def run_sensitivity_analysis(config_name: str = 'standard', 
                            custom_config: SobolConfig = None,
                            load_existing: bool = False):
@@ -120,12 +351,18 @@ def run_sensitivity_analysis(config_name: str = 'standard',
 
 def generate_reports(analyzer: SobolAnalyzer, 
                     sensitivity_indices: dict,
-                    create_plots: bool = True):
+                    create_plots: bool = True,
+                    config_name: str = "unknown",
+                    start_time: float = None):
     """生成分析报告"""
     
     print("\n" + "="*60)
     print("生成分析报告")
     print("="*60)
+    
+    # 保存参数配置记录
+    if start_time:
+        save_parameter_record(analyzer, config_name, start_time, time.time())
     
     # 生成摘要表
     try:
@@ -267,7 +504,9 @@ def main():
         generate_reports(
             analyzer, 
             sensitivity_indices, 
-            create_plots=not args.no_plots
+            create_plots=not args.no_plots,
+            config_name=args.config,
+            start_time=start_time
         )
         
         end_time = time.time()

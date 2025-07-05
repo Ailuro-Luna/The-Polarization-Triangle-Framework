@@ -76,7 +76,7 @@ class SobolConfig:
                 enable_zealots=True,
                 zealot_mode="random",
                 zealot_morality=True,
-                zealot_identity_allocation=True
+                zealot_identity_allocation=False
             )
 
 
