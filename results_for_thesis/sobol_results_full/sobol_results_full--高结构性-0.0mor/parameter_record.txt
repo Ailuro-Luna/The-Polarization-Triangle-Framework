@@ -1,0 +1,109 @@
+================================================================================
+Sobol敏感性分析参数配置记录
+================================================================================
+
+【分析信息】
+配置名称: full
+分析时间: 2025-07-07 00:33:15
+开始时间: 2025-07-06 13:36:46
+结束时间: 2025-07-07 00:33:15
+总耗时: 39388.08 秒
+输出目录: results/sobol_results_full
+
+【Sobol敏感性分析配置】
+基础样本数: 4096
+总样本数: 40960 (N × (2D + 2))
+每个样本运行次数: 50
+每次模拟步数: 300
+并行进程数: 8
+置信水平: 0.95
+Bootstrap样本数: 1000
+保存中间结果: True
+
+【敏感性分析参数及范围】
+alpha: [0, 1]
+beta: [0.0, 0.2]
+gamma: [0.2, 2.0]
+cohesion_factor: [0.0, 0.5]
+
+【网络配置】
+节点数量: 200
+网络类型: lfr
+网络参数:
+  tau1: 3
+  tau2: 1.5
+  mu: 0.1
+  average_degree: 5
+  min_community: 10
+
+【模拟配置】
+意见分布: uniform
+道德化率: 0
+身份聚类: True
+道德聚类: True
+意见聚类: True
+影响因子: 0.1
+容忍度: 0.6
+意见衰减率(δ): 1
+意见激活系数(u): 1
+默认自我激活系数(α): 0.4
+默认社会影响系数(β): 0.12
+默认道德化影响系数(γ): 1
+
+【Zealot配置】
+Zealot数量: 30
+启用Zealot: True
+Zealot模式: random
+Zealot意见: 1.0
+Zealot道德化: True
+按身份分配Zealot: True
+
+【计算复杂度】
+分析参数数量: 4 (alpha, beta, gamma, cohesion_factor)
+基础样本数: 4096
+总样本数: 40960
+每个样本运行次数: 50
+总模拟运行次数: 2,048,000
+每次模拟步数: 300
+总计算步数: 614,400,000
+并行进程数: 8
+
+【输出指标】
+极化相关指标:
+  - polarization_index
+  - opinion_variance
+  - extreme_ratio
+  - identity_polarization
+收敛相关指标:
+  - mean_abs_opinion
+  - final_stability
+动态过程指标:
+  - trajectory_length
+  - oscillation_frequency
+  - group_divergence
+身份相关指标:
+  - identity_variance_ratio
+  - cross_identity_correlation
+  - variance_per_identity_1
+  - variance_per_identity_neg1
+  - variance_per_identity_mean
+
+【指标描述】
+polarization_index: Koudenburg极化指数，衡量系统整体极化程度
+opinion_variance: 意见方差，反映观点分散程度
+extreme_ratio: 极端观点比例，|opinion| > 0.8的Agent比例
+identity_polarization: 身份间极化差异，不同身份群体平均意见的方差
+mean_abs_opinion: 平均绝对意见，系统观点强度
+final_stability: 最终稳定性，最后阶段的变异系数
+trajectory_length: 意见轨迹长度，观点变化的累积距离
+oscillation_frequency: 振荡频率，观点方向改变的频次
+group_divergence: 群体分化度，不同身份群体间的意见差异
+identity_variance_ratio: 身份方差比，组间方差与组内方差的比值
+cross_identity_correlation: 跨身份相关性，不同身份群体意见的相关系数
+variance_per_identity_1: 身份群体1方差，identity=1群体内部的意见方差
+variance_per_identity_neg1: 身份群体-1方差，identity=-1群体内部的意见方差
+variance_per_identity_mean: 身份群体平均方差，两个身份群体方差的均值
+
+================================================================================
+记录生成完成
+================================================================================

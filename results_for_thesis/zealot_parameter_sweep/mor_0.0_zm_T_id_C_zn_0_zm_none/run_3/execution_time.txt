@@ -1,0 +1,3 @@
+Execution time: 0h 0m 12.51s
+Configuration: steps=300, num_zealots=0, morality_rate=0, zealot_morality=True
+Modes run: none

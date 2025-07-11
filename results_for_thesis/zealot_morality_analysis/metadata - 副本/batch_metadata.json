@@ -1,0 +1,88 @@
+{
+  "batches": [
+    {
+      "batch_id": "20250624_033631",
+      "timestamp": "2025-06-24 05:09:46",
+      "experiment_type": "zealot_numbers",
+      "num_runs": 100,
+      "max_zealots": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 4
+    },
+    {
+      "batch_id": "20250624_033631",
+      "timestamp": "2025-06-24 09:01:23",
+      "experiment_type": "morality_ratios",
+      "num_runs": 100,
+      "max_morality": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 10
+    },
+    {
+      "batch_id": "20250624_123109",
+      "timestamp": "2025-06-24 14:02:25",
+      "experiment_type": "zealot_numbers",
+      "num_runs": 100,
+      "max_zealots": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 4
+    },
+    {
+      "batch_id": "20250624_123109",
+      "timestamp": "2025-06-24 17:11:27",
+      "experiment_type": "morality_ratios",
+      "num_runs": 100,
+      "max_morality": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 10
+    },
+    {
+      "batch_id": "20250624_181135",
+      "timestamp": "2025-06-25 00:01:38",
+      "experiment_type": "zealot_numbers",
+      "num_runs": 400,
+      "max_zealots": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 4
+    },
+    {
+      "batch_id": "20250625_101610",
+      "timestamp": "2025-06-25 13:00:16",
+      "experiment_type": "zealot_numbers",
+      "num_runs": 200,
+      "max_zealots": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 4
+    },
+    {
+      "batch_id": "20250625_101610",
+      "timestamp": "2025-06-25 19:31:10",
+      "experiment_type": "morality_ratios",
+      "num_runs": 200,
+      "max_morality": 100,
+      "x_range": [
+        0,
+        100
+      ],
+      "combinations_count": 10
+    }
+  ]
+}

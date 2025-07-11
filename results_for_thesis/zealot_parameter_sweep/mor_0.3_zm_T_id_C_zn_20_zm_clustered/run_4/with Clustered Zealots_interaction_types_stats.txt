@@ -1,0 +1,20 @@
+交互类型统计 - with Clustered Zealots
+--------------------------------------------------
+Rule 1: Same dir, Same ID, {0,0}, High Convergence: 223188 次 (38.0%)
+Rule 2: Same dir, Same ID, {0,1}, Medium Pull: 111165 次 (18.9%)
+Rule 3: Same dir, Same ID, {1,0}, Medium Pull: 111165 次 (18.9%)
+Rule 4: Same dir, Same ID, {1,1}, High Polarization: 59146 次 (10.1%)
+Rule 5: Same dir, Diff ID, {0,0}, Medium Convergence: 9248 次 (1.6%)
+Rule 6: Same dir, Diff ID, {0,1}, Low Pull: 2270 次 (0.4%)
+Rule 7: Same dir, Diff ID, {1,0}, Low Pull: 2270 次 (0.4%)
+Rule 8: Same dir, Diff ID, {1,1}, Medium Polarization: 1164 次 (0.2%)
+Rule 9: Diff dir, Same ID, {0,0}, Very High Convergence: 33012 次 (5.6%)
+Rule 10: Diff dir, Same ID, {0,1}, Medium Convergence/Pull: 9735 次 (1.7%)
+Rule 11: Diff dir, Same ID, {1,0}, Low Resistance: 9735 次 (1.7%)
+Rule 12: Diff dir, Same ID, {1,1}, Low Polarization: 8054 次 (1.4%)
+Rule 13: Diff dir, Diff ID, {0,0}, Low Convergence: 4552 次 (0.8%)
+Rule 14: Diff dir, Diff ID, {0,1}, High Pull: 1030 次 (0.2%)
+Rule 15: Diff dir, Diff ID, {1,0}, High Resistance: 1030 次 (0.2%)
+Rule 16: Diff dir, Diff ID, {1,1}, Very High Polarization: 636 次 (0.1%)
+--------------------------------------------------
+总计: 587400 次
