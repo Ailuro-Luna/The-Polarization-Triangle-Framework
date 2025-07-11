@@ -846,6 +846,32 @@ def get_enhanced_style_config(combo_labels: List[str], plot_type: str) -> Dict[s
                 'group': 'Default'
             }
     
+    # 为 variance_per_identity 指标添加带身份后缀的样式条目
+    # 复制每个基础样式，添加 (ID=1) 和 (ID=-1) 后缀的变体
+    variance_style_additions = {}
+    for label, base_style in style_config.items():
+        # 为 ID=1 创建样式（实线 + 圆形标记）
+        id1_style = base_style.copy()
+        id1_style['linestyle'] = '-'
+        # id1_style['marker'] = 'o'
+        variance_style_additions[f"{label} (ID=1)"] = id1_style
+        
+        # 为 ID=-1 创建样式（虚线 + 方形标记，稍小的标记）
+        id_neg1_style = base_style.copy()
+        id_neg1_style['linestyle'] = '--'
+        # id_neg1_style['marker'] = 's'
+        # id_neg1_style['markersize'] = max(6, base_style.get('markersize', 10) - 2)
+        variance_style_additions[f"{label} (ID=-1)"] = id_neg1_style
+        
+        # 为 variance_per_identity_combined 添加带加号的变体
+        # 为 ID=+1 创建样式（实线）
+        id_plus1_style = base_style.copy()
+        id_plus1_style['linestyle'] = '-'
+        variance_style_additions[f"{label} (ID=+1)"] = id_plus1_style
+    
+    # 将新的样式条目添加到原始 style_config 中
+    style_config.update(variance_style_additions)
+    
     return style_config
 
 
@@ -927,84 +953,6 @@ def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict
         'marker': markers.get(identity_val, 'o'),
         'markersize': 8 if identity_val == '1' else 6,  # ID=1 稍大的标记
         'group': f'identity_{identity_val}'
-    }
-
-
-def get_combined_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict[str, Any]:
-    """
-    为合并的 variance per identity 图表生成样式配置
-    
-    相同配置的两条线使用相同颜色和标记，但用实线/虚线区分身份组
-    
-    Args:
-        identity_label: 带身份标识的标签，如 "Random, ID-align=True (ID=+1)"
-        plot_type: 图表类型
-    
-    Returns:
-        dict: 样式配置
-    """
-    # 使用与单独函数相同的扩展颜色调色板（去重并确保足够的颜色）
-    colors = [
-        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
-        '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78',
-        '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d',
-        '#9edae5', '#ff1744', '#00e676', '#ffea00', '#651fff', '#ff6f00',
-        '#00bcd4', '#795548', '#607d8b', '#e91e63', '#4caf50', '#ffc107'
-    ]
-    
-    # 使用与单独函数相同的预定义映射
-    label_color_mapping = {
-        # morality_ratios 实验的10个基础标签
-        'Random, ID-align=True, ID-cluster=False': 0,
-        'Random, ID-align=True, ID-cluster=True': 1,
-        'Random, ID-align=False, ID-cluster=False': 2,
-        'Random, ID-align=False, ID-cluster=True': 3,
-        'Clustered, ID-align=True, ID-cluster=False': 4,
-        'Clustered, ID-align=True, ID-cluster=True': 5,
-        'Clustered, ID-align=False, ID-cluster=False': 6,
-        'Clustered, ID-align=False, ID-cluster=True': 7,
-        'None, ID-cluster=False': 8,
-        'None, ID-cluster=True': 9,
-        # zealot_numbers 实验的4个基础标签
-        'Random Zealots, Morality=0.0': 10,
-        'Random Zealots, Morality=0.3': 11,
-        'Clustered Zealots, Morality=0.0': 12,
-        'Clustered Zealots, Morality=0.3': 13,
-    }
-    
-    # 提取身份值（+1 或 -1）
-    identity_val = identity_label.split('(ID=')[-1].rstrip(')')
-    
-    # 提取原始组合标签
-    base_label = identity_label.split(' (ID=')[0]
-    
-    # 使用预定义的映射或回退到哈希方法
-    if base_label in label_color_mapping:
-        color_index = label_color_mapping[base_label]
-    else:
-        # 回退到哈希方法（用于未预定义的标签）
-        color_index = abs(hash(base_label)) % len(colors)
-    
-    # 线型：+1 用实线，-1 用虚线
-    linestyle = '-' if identity_val == '+1' else '--'
-    
-    # 标记：使用预定义映射确保一致性
-    markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', 'X', '+', 'x']
-    if base_label in label_color_mapping:
-        marker_index = label_color_mapping[base_label] % len(markers)
-    else:
-        marker_index = abs(hash(base_label)) % len(markers)
-    marker = markers[marker_index]
-    
-    # 标记大小：+1 稍大，-1 稍小
-    markersize = 8 if identity_val == '+1' else 6
-    
-    return {
-        'color': colors[color_index],
-        'linestyle': linestyle,
-        'marker': marker,
-        'markersize': markersize,
-        'group': f'combined_identity_{identity_val}'
     }
 
 
@@ -1315,13 +1263,8 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                 short_label = simplify_label(display_label)
                 label_with_runs = f"{short_label} (n={runs_info})"
             
-            # 为不同类型的 variance per identity 图表选择合适的样式配置函数
-            if metric == 'variance_per_identity_combined':
-                style = get_combined_variance_per_identity_style(display_label, plot_type)
-            elif metric.startswith('variance_per_identity'):
-                style = get_variance_per_identity_style(display_label, plot_type)
-            else:
-                style = style_config.get(display_label, {})
+            # 所有 metric 统一使用 style_config
+            style = style_config.get(display_label, {})
             
             # 获取颜色和样式
             line_color = style.get('color', 'blue')
@@ -1368,15 +1311,15 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             else:
                 # 8条线，使用3列
                 plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, fontsize=11)
-        elif metric.startswith('variance_per_identity'):
-            # 单独的 variance per identity 图表有更多线条，需要更多列和更小字体
-            if plot_type == 'morality_ratios':
-                # 20条线，使用4列
-                plt.legend(bbox_to_anchor=(0.5, -0.20), loc='upper center', ncol=4, 
-                          fontsize=10, frameon=True, fancybox=True, shadow=True)
-            else:
-                # 8条线，使用3列
-                plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, fontsize=11)
+        # elif metric.startswith('variance_per_identity'):
+        #     # 单独的 variance per identity 图表有更多线条，需要更多列和更小字体
+        #     if plot_type == 'morality_ratios':
+        #         # 20条线，使用4列
+        #         plt.legend(bbox_to_anchor=(0.5, -0.20), loc='upper center', ncol=4, 
+        #                   fontsize=10, frameon=True, fancybox=True, shadow=True)
+        #     else:
+        #         # 8条线，使用3列
+        #         plt.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3, fontsize=11)
         else:
             # 其他指标保持原有布局
             if plot_type == 'morality_ratios':
