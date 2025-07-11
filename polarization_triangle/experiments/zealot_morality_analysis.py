@@ -16,6 +16,47 @@ For each plot type, it generates 7 different Y-axis metrics:
 - Variance per identity (combined) - both identity groups on same plot
 
 Total: 14 plots (2 types × 7 metrics)
+
+ERROR BANDS CONFIGURATION:
+===========================
+For zealot_numbers plots, this experiment supports three types of error bands:
+
+1. Standard Deviation Bands:
+   - Shows mean ± standard deviation
+   - Traditional statistical measure of spread
+   - Good for understanding overall variability
+
+2. Percentile Bands:
+   - Shows 25th to 75th percentile range (interquartile range)
+   - More robust to outliers
+   - Better represents the central 50% of data
+
+3. Confidence Interval Bands:
+   - Shows 99% confidence interval using t-distribution
+   - Statistical inference about the true population mean
+   - Accounts for sample size and uncertainty in the estimate
+
+TO SWITCH BETWEEN ERROR BAND TYPES:
+===================================
+In the main function (if __name__ == "__main__":), find the section:
+
+    # ===== ERROR BANDS 配置：可通过注释/取消注释来切换 =====
+    # 方式1：标准差 error bands（均值 ± 标准差）
+    # error_band_type = 'std'  # 使用标准差方式
+    # 方式2：百分位数 error bands（25th-75th百分位数）
+    # error_band_type = 'percentile'  # 使用百分位数方式
+    # 方式3：置信区间 error bands（99%置信区间）
+    error_band_type = 'confidence'  # 使用置信区间方式
+
+To switch between types:
+1. Comment out all lines except the one you want to use
+2. For example, to use standard deviation:
+   - Uncomment: error_band_type = 'std'
+   - Comment out the other two options
+
+The generated plots will show the appropriate error band type in:
+- Plot titles (e.g., "with Std Dev Bands", "with Percentile Bands (25th-75th)", or "with Confidence Interval (99%)")
+- File names (e.g., "zealot_numbers_mean_opinion_mean_with_std_bands.png", "_percentile_bands.png", "_confidence_bands.png")
 """
 
 import numpy as np
@@ -29,6 +70,7 @@ from tqdm import tqdm
 from typing import Dict, List, Tuple, Any
 import itertools
 from glob import glob
+from scipy import stats
 
 from polarization_triangle.core.config import SimulationConfig, high_polarization_config
 from polarization_triangle.core.simulation import Simulation
@@ -983,7 +1025,8 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                             plot_type: str,
                             enable_smoothing: bool = True,
                             target_step: int = 2,
-                            smooth_method: str = 'savgol') -> None:
+                            smooth_method: str = 'savgol',
+                            error_band_type: str = 'std') -> None:
     """
     使用数据管理器绘制实验结果图表
     
@@ -993,6 +1036,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         enable_smoothing: 是否启用平滑和重采样
         target_step: 重采样的目标步长（比如从步长1变为步长2）
         smooth_method: 平滑方法 ('savgol', 'moving_avg', 'none')
+        error_band_type: zealot_numbers图表的error band类型 ('std' 或 'percentile')
     """
     # 从数据管理器获取绘图数据
     all_results, x_values, total_runs_per_combination = data_manager.convert_to_plotting_format(plot_type)
@@ -1055,37 +1099,77 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                 # 处理 identity=1 的数据
                 metric_data_1 = results['variance_per_identity_1']
                 means_1, stds_1 = [], []
+                lower_percentiles_1, upper_percentiles_1 = [], []
+                lower_ci_1, upper_ci_1 = [], []
                 for i, x_runs in enumerate(metric_data_1):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means_1.append(np.mean(valid_runs))
                         stds_1.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
+                        
+                        # 计算百分位数
+                        lower_p, upper_p = calculate_percentile_bands(valid_runs, percentile_range=(25.0, 75.0))
+                        lower_percentiles_1.append(lower_p)
+                        upper_percentiles_1.append(upper_p)
+                        
+                        # 计算置信区间
+                        lower_c, upper_c = calculate_confidence_interval(valid_runs, confidence_level=0.95)
+                        lower_ci_1.append(lower_c)
+                        upper_ci_1.append(upper_c)
                     else:
                         means_1.append(np.nan)
                         stds_1.append(np.nan)
+                        lower_percentiles_1.append(np.nan)
+                        upper_percentiles_1.append(np.nan)
+                        lower_ci_1.append(np.nan)
+                        upper_ci_1.append(np.nan)
                 
                 # 处理 identity=-1 的数据
                 metric_data_neg1 = results['variance_per_identity_-1']
                 means_neg1, stds_neg1 = [], []
+                lower_percentiles_neg1, upper_percentiles_neg1 = [], []
+                lower_ci_neg1, upper_ci_neg1 = [], []
                 for i, x_runs in enumerate(metric_data_neg1):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means_neg1.append(np.mean(valid_runs))
                         stds_neg1.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
+                        
+                        # 计算百分位数
+                        lower_p, upper_p = calculate_percentile_bands(valid_runs, percentile_range=(25.0, 75.0))
+                        lower_percentiles_neg1.append(lower_p)
+                        upper_percentiles_neg1.append(upper_p)
+                        
+                        # 计算置信区间
+                        lower_c, upper_c = calculate_confidence_interval(valid_runs, confidence_level=0.99)
+                        lower_ci_neg1.append(lower_c)
+                        upper_ci_neg1.append(upper_c)
                     else:
                         means_neg1.append(np.nan)
                         stds_neg1.append(np.nan)
+                        lower_percentiles_neg1.append(np.nan)
+                        upper_percentiles_neg1.append(np.nan)
+                        lower_ci_neg1.append(np.nan)
+                        upper_ci_neg1.append(np.nan)
                 
                 # 创建两条线的数据
                 processed_data[f"{combo_label} (ID=+1)"] = {
                     'means': np.array(means_1),
                     'stds': np.array(stds_1),
+                    'lower_percentiles': np.array(lower_percentiles_1),
+                    'upper_percentiles': np.array(upper_percentiles_1),
+                    'lower_ci': np.array(lower_ci_1),
+                    'upper_ci': np.array(upper_ci_1),
                     'identity': '+1',
                     'base_combo': combo_label
                 }
                 processed_data[f"{combo_label} (ID=-1)"] = {
                     'means': np.array(means_neg1),
                     'stds': np.array(stds_neg1),
+                    'lower_percentiles': np.array(lower_percentiles_neg1),
+                    'upper_percentiles': np.array(upper_percentiles_neg1),
+                    'lower_ci': np.array(lower_ci_neg1),
+                    'upper_ci': np.array(upper_ci_neg1),
                     'identity': '-1',
                     'base_combo': combo_label
                 }
@@ -1096,45 +1180,95 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
             for combo_label, results in all_results.items():
                 metric_data = results[metric]
                 means, stds = [], []
+                lower_percentiles, upper_percentiles = [], []
+                lower_ci, upper_ci = [], []
                 
                 for i, x_runs in enumerate(metric_data):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means.append(np.mean(valid_runs))
                         stds.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
+                        
+                        # 计算百分位数
+                        lower_p, upper_p = calculate_percentile_bands(valid_runs, percentile_range=(25.0, 75.0))
+                        lower_percentiles.append(lower_p)
+                        upper_percentiles.append(upper_p)
+                        
+                        # 计算置信区间
+                        lower_c, upper_c = calculate_confidence_interval(valid_runs, confidence_level=0.99)
+                        lower_ci.append(lower_c)
+                        upper_ci.append(upper_c)
                     else:
                         means.append(np.nan)
                         stds.append(np.nan)
+                        lower_percentiles.append(np.nan)
+                        upper_percentiles.append(np.nan)
+                        lower_ci.append(np.nan)
+                        upper_ci.append(np.nan)
                 
                 # 为 variance per identity 创建带身份标识的标签
                 identity_label = f"{combo_label} (ID={identity_suffix})"
                 processed_data[identity_label] = {
                     'means': np.array(means),
-                    'stds': np.array(stds)
+                    'stds': np.array(stds),
+                    'lower_percentiles': np.array(lower_percentiles),
+                    'upper_percentiles': np.array(upper_percentiles),
+                    'lower_ci': np.array(lower_ci),
+                    'upper_ci': np.array(upper_ci)
                 }
         else:
-            # 对于其他指标，计算均值和标准差
+            # 对于其他指标，计算均值、标准差、百分位数和置信区间
             for combo_label, results in all_results.items():
                 metric_data = results[metric]
                 means, stds = [], []
+                lower_percentiles, upper_percentiles = [], []
+                lower_ci, upper_ci = [], []
                 
                 for i, x_runs in enumerate(metric_data):
                     valid_runs = [val for val in x_runs if not np.isnan(val)]
                     if valid_runs:
                         means.append(np.mean(valid_runs))
                         stds.append(np.std(valid_runs, ddof=1) if len(valid_runs) > 1 else 0.0)
+                        
+                        # 计算百分位数（默认使用25th-75th百分位数）
+                        lower_p, upper_p = calculate_percentile_bands(valid_runs, percentile_range=(25.0, 75.0))
+                        lower_percentiles.append(lower_p)
+                        upper_percentiles.append(upper_p)
+                        
+                        # 计算置信区间（默认使用99%置信区间）
+                        lower_c, upper_c = calculate_confidence_interval(valid_runs, confidence_level=0.99)
+                        lower_ci.append(lower_c)
+                        upper_ci.append(upper_c)
                     else:
                         means.append(np.nan)
                         stds.append(np.nan)
+                        lower_percentiles.append(np.nan)
+                        upper_percentiles.append(np.nan)
+                        lower_ci.append(np.nan)
+                        upper_ci.append(np.nan)
                 
                 processed_data[combo_label] = {
                     'means': np.array(means),
-                    'stds': np.array(stds)
+                    'stds': np.array(stds),
+                    'lower_percentiles': np.array(lower_percentiles),
+                    'upper_percentiles': np.array(upper_percentiles),
+                    'lower_ci': np.array(lower_ci),
+                    'upper_ci': np.array(upper_ci)
                 }
         
         # 添加运行次数信息到标题（显示总run数）
         if plot_type == 'zealot_numbers':
-            title_suffix = f" with Error Bands ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" with Error Bands ({min_runs} total runs)"
+            # 根据error band类型确定标题
+            if error_band_type == 'std':
+                band_type_str = "Std Dev Bands"
+            elif error_band_type == 'percentile':
+                band_type_str = "Percentile Bands (25th-75th)"
+            elif error_band_type == 'confidence':
+                band_type_str = "Confidence Interval (99%)"
+            else:
+                band_type_str = "Error Bands"
+            
+            title_suffix = f" with {band_type_str} ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" with {band_type_str} ({min_runs} total runs)"
         else:
             title_suffix = f" ({min_runs}-{max_runs} total runs)" if min_runs != max_runs else f" ({min_runs} total runs)"
         
@@ -1200,19 +1334,25 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                     linewidth=3.5, markersize=style.get('markersize', 10), alpha=0.85,
                     markeredgewidth=2, markeredgecolor='white')
             
-            # 为 zealot_numbers 添加 error bands（标准差范围）
-            if plot_type == 'zealot_numbers' and 'stds' in data and not enable_smoothing:
-                means = data['means']
-                stds = data['stds']
-                
-                # 计算上下边界
-                upper_bound = means + stds
-                lower_bound = means - stds
-                
-                # 绘制 error bands（使用相同颜色但透明度较低）
-                plt.fill_between(x_values, lower_bound, upper_bound, 
-                               color=line_color, alpha=0.2, 
-                               linewidth=0, interpolate=True)
+            # 为 zealot_numbers 添加 error bands
+            if plot_type == 'zealot_numbers' and not enable_smoothing:
+                if error_band_type == 'std' and 'stds' in data:
+                    # 使用标准差方式（均值 ± 标准差）
+                    means = data['means']
+                    stds = data['stds']
+                    draw_std_error_bands(x_values, means, stds, line_color, alpha=0.2)
+                    
+                elif error_band_type == 'percentile' and 'lower_percentiles' in data and 'upper_percentiles' in data:
+                    # 使用百分位数方式（25th-75th百分位数）
+                    lower_percentiles = data['lower_percentiles']
+                    upper_percentiles = data['upper_percentiles']
+                    draw_percentile_error_bands(x_values, lower_percentiles, upper_percentiles, line_color, alpha=0.2)
+                    
+                elif error_band_type == 'confidence' and 'lower_ci' in data and 'upper_ci' in data:
+                    # 使用置信区间方式（99%置信区间）
+                    lower_ci = data['lower_ci']
+                    upper_ci = data['upper_ci']
+                    draw_confidence_interval_error_bands(x_values, lower_ci, upper_ci, line_color, alpha=0.2)
         
         plt.xlabel(x_label, fontsize=16)
         plt.ylabel(metric_labels[metric], fontsize=16)
@@ -1248,7 +1388,7 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
         
-        # 为文件名添加平滑标识
+        # 为文件名添加平滑标识和error band类型
         if enable_smoothing:
             if plot_type == 'zealot_numbers':
                 filename = f"{plot_type}_{metric}_smoothed_step{target_step}_{smooth_method}{runs_suffix}.png"
@@ -1256,7 +1396,16 @@ def plot_results_with_manager(data_manager: ExperimentDataManager,
                 filename = f"{plot_type}_{metric}_smoothed_step{target_step}_{smooth_method}{runs_suffix}.png"
         else:
             if plot_type == 'zealot_numbers':
-                filename = f"{plot_type}_{metric}_mean_with_error_bands{runs_suffix}.png"
+                # 添加error band类型到文件名
+                if error_band_type == 'std':
+                    band_type_suffix = "_std_bands"
+                elif error_band_type == 'percentile':
+                    band_type_suffix = "_percentile_bands"
+                elif error_band_type == 'confidence':
+                    band_type_suffix = "_confidence_bands"
+                else:
+                    band_type_suffix = "_error_bands"
+                filename = f"{plot_type}_{metric}_mean_with{band_type_suffix}{runs_suffix}.png"
             else:
                 filename = f"{plot_type}_{metric}_mean{runs_suffix}.png"
         filepath = os.path.join(plot_folders['mean'], filename)
@@ -1418,7 +1567,8 @@ def run_and_accumulate_data(output_dir: str = "results/zealot_morality_analysis"
 def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analysis",
                              enable_smoothing: bool = True,
                              target_step: int = 2,
-                             smooth_method: str = 'savgol'):
+                             smooth_method: str = 'savgol',
+                             error_band_type: str = 'std'):
     """
     从新的数据管理器中读取数据并生成图表（第二部分）
     
@@ -1430,6 +1580,7 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
         enable_smoothing: 是否启用平滑处理（仅影响morality_ratios图表）
         target_step: 重采样步长（2表示从101个点变为51个点）
         smooth_method: 平滑方法 ('savgol', 'moving_avg', 'none')
+        error_band_type: zealot_numbers图表的error band类型 ('std' 或 'percentile')
     """
     print("📊 Generating Plots from Data Manager")
     if enable_smoothing:
@@ -1449,8 +1600,16 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     zealot_summary = data_manager.get_experiment_summary('zealot_numbers')
     if zealot_summary['total_records'] > 0:
         plot_results_with_manager(data_manager, 'zealot_numbers', 
-                                False, target_step, smooth_method)  # 强制关闭平滑
-        print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots with error bands")
+                                False, target_step, smooth_method, error_band_type)  # 强制关闭平滑，使用指定的error band类型
+        if error_band_type == 'std':
+            band_type_description = "standard deviation"
+        elif error_band_type == 'percentile':
+            band_type_description = "percentile (25th-75th)"
+        elif error_band_type == 'confidence':
+            band_type_description = "confidence interval (99%)"
+        else:
+            band_type_description = "unknown"
+        print(f"✅ Generated {len(zealot_summary['combinations'])} zealot numbers plots with {band_type_description} error bands")
     else:
         print("❌ No zealot numbers data found")
     
@@ -1459,7 +1618,7 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     morality_summary = data_manager.get_experiment_summary('morality_ratios')
     if morality_summary['total_records'] > 0:
         plot_results_with_manager(data_manager, 'morality_ratios',
-                                enable_smoothing, target_step, smooth_method)
+                                enable_smoothing, target_step, smooth_method, 'std')  # morality_ratios不使用error bands，传递默认值
         if enable_smoothing:
             print(f"✅ Generated {len(morality_summary['combinations'])} morality ratios plots with smoothing")
         else:
@@ -1474,7 +1633,15 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
     print("\n" + "=" * 70)
     print("🎉 Plot Generation Completed Successfully!")
     print(f"📊 Generated plots from Parquet data files")
-    print(f"📈 Zealot Numbers: Error bands enabled (smoothing disabled)")
+    if error_band_type == 'std':
+        band_type_description = "standard deviation"
+    elif error_band_type == 'percentile':
+        band_type_description = "percentile (25th-75th)"
+    elif error_band_type == 'confidence':
+        band_type_description = "confidence interval (99%)"
+    else:
+        band_type_description = "unknown"
+    print(f"📈 Zealot Numbers: {band_type_description} error bands enabled (smoothing disabled)")
     if enable_smoothing:
         print(f"📈 Morality Ratios: Smoothing enabled (step {target_step}, {smooth_method})")
     else:
@@ -1484,7 +1651,8 @@ def plot_from_accumulated_data(output_dir: str = "results/zealot_morality_analys
 
 
 def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_analysis", 
-                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30, num_processes: int = 1):
+                                num_runs: int = 5, max_zealots: int = 50, max_morality: int = 30, num_processes: int = 1,
+                                error_band_type: str = 'std'):
     """
     运行完整的zealot和morality分析实验（保持向后兼容）
     
@@ -1494,6 +1662,7 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     max_zealots: 最大zealot数量
     max_morality: 最大morality ratio (%)
     num_processes: 并行进程数，1表示串行执行
+    error_band_type: zealot_numbers图表的error band类型 ('std' 或 'percentile')
     """
     print("🔬 Starting Complete Zealot and Morality Analysis Experiment")
     print("=" * 70)
@@ -1502,7 +1671,7 @@ def run_zealot_morality_analysis(output_dir: str = "results/zealot_morality_anal
     run_and_accumulate_data(output_dir, num_runs, max_zealots, max_morality, "", num_processes)
     
     # 第二步：从累积数据生成图表
-    plot_from_accumulated_data(output_dir)
+    plot_from_accumulated_data(output_dir, error_band_type=error_band_type)
 
 
 def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analysis", 
@@ -1603,6 +1772,114 @@ def run_no_zealot_morality_data(output_dir: str = "results/zealot_morality_analy
     print("\n" + data_manager.export_summary_report())
 
 
+def calculate_percentile_bands(valid_runs: List[float], percentile_range: Tuple[float, float] = (25.0, 75.0)) -> Tuple[float, float]:
+    """
+    计算给定数据的百分位数区间
+    
+    Args:
+        valid_runs: 有效运行数据列表
+        percentile_range: 百分位数范围，默认为 (25.0, 75.0) 即25th-75th百分位数
+    
+    Returns:
+        tuple: (下百分位数, 上百分位数)
+    """
+    if len(valid_runs) < 2:
+        return 0.0, 0.0
+    
+    lower_percentile = np.percentile(valid_runs, percentile_range[0])
+    upper_percentile = np.percentile(valid_runs, percentile_range[1])
+    
+    return lower_percentile, upper_percentile
+
+
+def calculate_confidence_interval(valid_runs: List[float], confidence_level: float = 0.99) -> Tuple[float, float]:
+    """
+    计算给定数据的置信区间
+    
+    Args:
+        valid_runs: 有效运行数据列表
+        confidence_level: 置信水平，默认为 0.99 (99%置信区间)
+    
+    Returns:
+        tuple: (置信区间下界, 置信区间上界)
+    """
+    if len(valid_runs) < 2:
+        return 0.0, 0.0
+    
+    # 计算样本均值和标准误差
+    sample_mean = np.mean(valid_runs)
+    sample_std = np.std(valid_runs, ddof=1)  # 样本标准差
+    sample_size = len(valid_runs)
+    standard_error = sample_std / np.sqrt(sample_size)
+    
+    # 计算t值（使用t分布，对小样本更准确）
+    alpha = 1 - confidence_level
+    degrees_of_freedom = sample_size - 1
+    t_value = stats.t.ppf(1 - alpha/2, degrees_of_freedom)
+    
+    # 计算置信区间
+    margin_of_error = t_value * standard_error
+    lower_bound = sample_mean - margin_of_error
+    upper_bound = sample_mean + margin_of_error
+    
+    return lower_bound, upper_bound
+
+
+def draw_std_error_bands(x_values, means, stds, line_color, alpha=0.2):
+    """
+    绘制标准差 error bands（均值 ± 标准差）
+    
+    Args:
+        x_values: x轴数据
+        means: 均值数组
+        stds: 标准差数组
+        line_color: 线条颜色
+        alpha: 透明度
+    """
+    # 计算上下边界
+    upper_bound = means + stds
+    lower_bound = means - stds
+    
+    # 绘制 error bands（使用相同颜色但透明度较低）
+    plt.fill_between(x_values, lower_bound, upper_bound, 
+                   color=line_color, alpha=alpha, 
+                   linewidth=0, interpolate=True)
+
+
+def draw_percentile_error_bands(x_values, lower_percentiles, upper_percentiles, line_color, alpha=0.2):
+    """
+    绘制百分位数 error bands（下百分位数 - 上百分位数）
+    
+    Args:
+        x_values: x轴数据
+        lower_percentiles: 下百分位数数组
+        upper_percentiles: 上百分位数数组
+        line_color: 线条颜色
+        alpha: 透明度
+    """
+    # 绘制 error bands（使用相同颜色但透明度较低）
+    plt.fill_between(x_values, lower_percentiles, upper_percentiles, 
+                   color=line_color, alpha=alpha, 
+                   linewidth=0, interpolate=True)
+
+
+def draw_confidence_interval_error_bands(x_values, lower_ci, upper_ci, line_color, alpha=0.2):
+    """
+    绘制置信区间 error bands（置信区间下界 - 置信区间上界）
+    
+    Args:
+        x_values: x轴数据
+        lower_ci: 置信区间下界数组
+        upper_ci: 置信区间上界数组
+        line_color: 线条颜色
+        alpha: 透明度
+    """
+    # 绘制 error bands（使用相同颜色但透明度较低）
+    plt.fill_between(x_values, lower_ci, upper_ci, 
+                   color=line_color, alpha=alpha, 
+                   linewidth=0, interpolate=True)
+
+
 if __name__ == "__main__":
     # 新的分离式使用方法：
     
@@ -1618,15 +1895,15 @@ if __name__ == "__main__":
     # 数据收集阶段
     data_collection_start_time = time.time()
     
-    # 可以多次运行以下命令来积累数据：
-    run_and_accumulate_data(
-        output_dir="results/zealot_morality_analysis",
-        num_runs=200,  # 每次运行200轮测试
-        max_zealots=100,  
-        max_morality=100,
-        # batch_name="batch_001"  # 可选：给批次命名
-        num_processes=8  # 使用8个进程进行并行计算
-    )
+    # # 可以多次运行以下命令来积累数据：
+    # run_and_accumulate_data(
+    #     output_dir="results/zealot_morality_analysis",
+    #     num_runs=200,  # 每次运行200轮测试
+    #     max_zealots=100,  
+    #     max_morality=100,
+    #     # batch_name="batch_001"  # 可选：给批次命名
+    #     num_processes=8  # 使用8个进程进行并行计算
+    # )
     
     data_collection_end_time = time.time()
     data_collection_duration = data_collection_end_time - data_collection_start_time
@@ -1636,11 +1913,20 @@ if __name__ == "__main__":
 
     plotting_start_time = time.time()
 
+    # ===== ERROR BANDS 配置：可通过注释/取消注释来切换 =====
+    # 方式1：标准差 error bands（均值 ± 标准差）
+    # error_band_type = 'std'  # 使用标准差方式
+    # 方式2：百分位数 error bands（25th-75th百分位数）
+    # error_band_type = 'percentile'  # 使用百分位数方式
+    # 方式3：置信区间 error bands（99%置信区间）
+    error_band_type = 'confidence'  # 使用置信区间方式
+
     plot_from_accumulated_data(
         output_dir="results/zealot_morality_analysis",
         enable_smoothing=False,       # 不启用平滑
         target_step=2,             # 从步长1重采样到步长2（101个点→51个点）
-        smooth_method='savgol'     # 使用Savitzky-Golay平滑
+        smooth_method='savgol',     # 使用Savitzky-Golay平滑
+        error_band_type=error_band_type  # 使用上面配置的error band类型
     )
     
     plotting_end_time = time.time()

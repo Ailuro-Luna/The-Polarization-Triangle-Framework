@@ -67,7 +67,7 @@ class SobolConfig:
                     'average_degree': 5, 'min_community': 10
                 },
                 opinion_distribution='uniform',
-                morality_rate=0.3,
+                morality_rate=0,
                 cluster_identity=False,
                 cluster_morality=False,
                 cluster_opinion=False,

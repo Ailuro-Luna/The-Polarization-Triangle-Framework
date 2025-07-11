@@ -49,7 +49,7 @@ HIGH_CONTRAST_CONFIG = {
 # 2. 对称配置（用于强调正负对称的数据）
 SYMMETRIC_CONFIG = {
     'cmap': 'RdBu',
-    'log_scale': False,
+    'log_scale': True,
     'vmin': 0,        # 最小值
     'vmax': 50,       # 最大值
 }
@@ -57,7 +57,7 @@ SYMMETRIC_CONFIG = {
 # 3. 细节强调配置（线性尺度，突出细微变化）
 DETAIL_CONFIG = {
     'cmap': 'viridis',
-    'log_scale': False,
+    'log_scale': True,
     'vmin': 0,
     'vmax': 20,       # 较小的最大值，放大细节
 }
@@ -73,7 +73,7 @@ COLORBLIND_FRIENDLY_CONFIG = {
 # 5. 论文发表配置（黑白友好）
 PUBLICATION_CONFIG = {
     'cmap': 'gray',
-    'log_scale': False,
+    'log_scale': True,
     'vmin': 0,
     'vmax': 30,
 }
