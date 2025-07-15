@@ -35,10 +35,17 @@ def run_parameter_sweep(
     # zealot_counts = [10, 50]  # zealot的数量
     # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
     
+    # # 定义参数值范围
+    # morality_rates = [0, 0.3]  # moralizing的non-zealot people的比例
+    # zealot_moralities = [True]  # zealot是否全部moralizing
+    # identity_clustered = [True, False]  # 是否按identity进行clustered的初始化
+    # zealot_counts = [20]  # zealot的数量
+    # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
+
     # 定义参数值范围
     morality_rates = [0, 0.3]  # moralizing的non-zealot people的比例
     zealot_moralities = [True]  # zealot是否全部moralizing
-    identity_clustered = [True]  # 是否按identity进行clustered的初始化
+    identity_clustered = [True, False]  # 是否按identity进行clustered的初始化
     zealot_counts = [20]  # zealot的数量
     zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
 
@@ -86,12 +93,18 @@ def run_parameter_sweep(
         )
         
         # 创建更易读的配置名称用于图表
+        mode_display = {
+            "none": "No Zealots",
+            "clustered": "Clustered",
+            "random": "Random",
+            "high-degree": "High-Degree"
+        }
         readable_name = (
-            f"MR:{morality_rate:.1f} "
-            # f"ZM:{'T' if zealot_morality else 'F'} "
-            f"ID:{'C' if id_clustered else 'R'} "
-            # f"ZN:{zealot_count} "
-            f"Mode:{zealot_mode}"
+            f"Morality Rate:{morality_rate:.1f};"
+            # f"Zealot Morality:{'T' if zealot_morality else 'F'};"
+            f"Identity:{'Clustered' if id_clustered else 'Random'};"
+            # f"Zealot Count:{zealot_count};"
+            f"Zealot Mode:{mode_display.get(zealot_mode, zealot_mode)}"
         )
         config_names.append(readable_name)
         

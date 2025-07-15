@@ -359,7 +359,7 @@ def create_config_combinations():
                         'zealot_mode': zealot_mode,                  # zealot分布模式
                         'zealot_identity_allocation': zealot_identity,  # zealot身份对齐方式
                         'cluster_identity': identity_dist,           # 身份分布方式
-                        'label': f'{zealot_mode.capitalize()}, ID-align={zealot_identity}, ID-cluster={identity_dist}',
+                        'label': f'{zealot_mode.capitalize()} Zealots, ID-align={zealot_identity}, ID-cluster={identity_dist}',
                         'steps': base_config.steps
                     }
                     combinations['morality_ratios'].append(combo)
@@ -898,14 +898,14 @@ def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict
     # 预定义的标签到颜色索引的映射（避免哈希冲突）
     label_color_mapping = {
         # morality_ratios 实验的10个基础标签
-        'Random, ID-align=True, ID-cluster=False': 0,
-        'Random, ID-align=True, ID-cluster=True': 1,
-        'Random, ID-align=False, ID-cluster=False': 2,
-        'Random, ID-align=False, ID-cluster=True': 3,
-        'Clustered, ID-align=True, ID-cluster=False': 4,
-        'Clustered, ID-align=True, ID-cluster=True': 5,
-        'Clustered, ID-align=False, ID-cluster=False': 6,
-        'Clustered, ID-align=False, ID-cluster=True': 7,
+        'Random Zealots, ID-align=True, ID-cluster=False': 0,
+        'Random Zealots, ID-align=True, ID-cluster=True': 1,
+        'Random Zealots, ID-align=False, ID-cluster=False': 2,
+        'Random Zealots, ID-align=False, ID-cluster=True': 3,
+        'Clustered Zealots, ID-align=True, ID-cluster=False': 4,
+        'Clustered Zealots, ID-align=True, ID-cluster=True': 5,
+        'Clustered Zealots, ID-align=False, ID-cluster=False': 6,
+        'Clustered Zealots, ID-align=False, ID-cluster=True': 7,
         'None, ID-cluster=False': 8,
         'None, ID-cluster=True': 9,
         # zealot_numbers 实验的4个基础标签
@@ -958,15 +958,26 @@ def get_variance_per_identity_style(identity_label: str, plot_type: str) -> Dict
 
 def simplify_label(combo_label: str) -> str:
     """
-    简化组合标签（当前保持原始标签以确保完整含义）
+    简化组合标签，同时提供向后兼容的标签转换
+    
+    将旧格式的标签转换为新格式以保持一致性：
+    - "Random, ID-align=..." → "Random Zealots, ID-align=..."
+    - "Clustered, ID-align=..." → "Clustered Zealots, ID-align=..."
     
     Args:
     combo_label: 原始组合标签
     
     Returns:
-    str: 简化后的标签
+    str: 转换后的标签
     """
-    return combo_label
+    # 向后兼容：将旧格式标签转换为新格式
+    if combo_label.startswith('Random, ID-align='):
+        return combo_label.replace('Random, ID-align=', 'Random Zealots, ID-align=')
+    elif combo_label.startswith('Clustered, ID-align='):
+        return combo_label.replace('Clustered, ID-align=', 'Clustered Zealots, ID-align=')
+    else:
+        # 对于新格式标签或其他类型标签，直接返回
+        return combo_label
 
 
 def plot_results_with_manager(data_manager: ExperimentDataManager, 
