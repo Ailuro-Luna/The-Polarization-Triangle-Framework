@@ -4,8 +4,113 @@ import itertools
 from tqdm import tqdm
 import time
 import matplotlib.pyplot as plt
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
 from polarization_triangle.experiments.multi_zealot_experiment import run_multi_zealot_experiment, average_stats, plot_average_statistics, generate_average_heatmaps
+
+def process_single_parameter_combination(params_and_config):
+    """
+    处理单个参数组合的函数，用于多进程并行
+    
+    参数:
+    params_and_config -- 包含参数组合和配置信息的元组
+    
+    返回:
+    dict -- 包含参数组合名称、统计数据、执行时间等信息
+    """
+    params, config = params_and_config
+    morality_rate, zealot_morality, id_clustered, zealot_count, zealot_mode = params
+    runs_per_config, steps, initial_scale, base_seed, output_base_dir = config
+    
+    # 跳过无效组合：如果zealot_mode为"none"，但zealot_count不为0
+    if zealot_mode == "none" and zealot_count != 0:
+        zealot_count = 0  # 如果模式是"none"，强制将zealot数量设为0
+    
+    # 创建参数组合描述的文件夹名
+    folder_name = (
+        f"mor_{morality_rate:.1f}_"
+        f"zm_{'T' if zealot_morality else 'F'}_"
+        f"id_{'C' if id_clustered else 'R'}_"
+        f"zn_{zealot_count}_"
+        f"zm_{zealot_mode}"
+    )
+    
+    # 创建更易读的配置名称用于图表
+    mode_display = {
+        "none": "No Zealots",
+        "clustered": "Clustered",
+        "random": "Random",
+        "high-degree": "High-Degree"
+    }
+    readable_name = (
+        f"Morality Rate:{morality_rate:.1f};"
+        # f"Zealot Morality:{'T' if zealot_morality else 'F'};"
+        f"Identity:{'Clustered' if id_clustered else 'Random'};"
+        # f"Zealot Count:{zealot_count};"
+        f"Zealot Mode:{mode_display.get(zealot_mode, zealot_mode)}"
+    )
+    
+    # 输出目录
+    output_dir = os.path.join(output_base_dir, folder_name)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+        # 记录开始时间
+    start_time = time.time()
+    process_id = os.getpid()
+    print(f"Process {process_id}: Running combination {folder_name}")
+    
+    # 运行多次实验并求均值
+    try:
+        # 运行实验，为每个进程使用不同的种子基础
+        adjusted_base_seed = base_seed + (process_id % 10000)  # 基于进程ID调整种子
+        
+        avg_stats = run_zealot_parameter_experiment(
+            runs=runs_per_config,
+            steps=steps,
+            initial_scale=initial_scale,
+            morality_rate=morality_rate,
+            zealot_morality=zealot_morality,
+            identity_clustered=id_clustered,
+            zealot_count=zealot_count,
+            zealot_mode=zealot_mode,
+            base_seed=adjusted_base_seed,
+            output_dir=output_dir
+        )
+        
+        # 记录结束时间和耗时
+        end_time = time.time()
+        elapsed = end_time - start_time
+        print(f"Process {process_id}: Completed {folder_name} in {elapsed:.1f} seconds")
+        
+        # 记录进度到日志文件（每个进程使用独立的日志文件）
+        log_file = os.path.join(output_base_dir, f"sweep_progress_{process_id}.log")
+        with open(log_file, "a") as f:
+            f.write(f"Completed: {folder_name}, Time: {elapsed:.1f}s, Process: {process_id}\n")
+        
+        return {
+            'success': True,
+            'readable_name': readable_name,
+            'avg_stats': avg_stats,
+            'elapsed': elapsed,
+            'folder_name': folder_name
+        }
+        
+    except Exception as e:
+        print(f"Process {process_id}: Error running {folder_name}: {str(e)}")
+        # 记录错误到日志文件（每个进程使用独立的日志文件）
+        error_log_file = os.path.join(output_base_dir, f"sweep_errors_{process_id}.log")
+        with open(error_log_file, "a") as f:
+            f.write(f"Error in {folder_name}: {str(e)}, Process: {process_id}\n")
+        
+        return {
+            'success': False,
+            'readable_name': readable_name,
+            'error': str(e),
+            'folder_name': folder_name
+        }
+
 
 # 生成所有可能的参数组合，并运行实验
 def run_parameter_sweep(
@@ -13,10 +118,11 @@ def run_parameter_sweep(
     steps=100,
     initial_scale=0.1,
     base_seed=42,
-    output_base_dir="results/zealot_parameter_sweep"
+    output_base_dir="results/zealot_parameter_sweep",
+    num_processes=None
 ):
     """
-    运行参数扫描实验，测试不同参数组合
+    运行参数扫描实验，测试不同参数组合（多进程版本）
     
     参数:
     runs_per_config -- 每种参数配置运行的次数
@@ -24,24 +130,17 @@ def run_parameter_sweep(
     initial_scale -- 初始意见的缩放因子
     base_seed -- 基础随机种子
     output_base_dir -- 结果输出的基础目录
+    num_processes -- 使用的进程数量，默认为None（使用CPU核心数）
     """
     # 记录总体开始时间
     total_start_time = time.time()
     
-    # # 定义参数值范围
-    # morality_rates = [0.0, 0.2, 0.5]  # moralizing的non-zealot people的比例
-    # zealot_moralities = [True, False]  # zealot是否全部moralizing
-    # identity_clustered = [True, False]  # 是否按identity进行clustered的初始化
-    # zealot_counts = [10, 50]  # zealot的数量
-    # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
+    # 确定进程数量
+    if num_processes is None:
+        num_processes = cpu_count()
     
-    # # 定义参数值范围
-    # morality_rates = [0, 0.3]  # moralizing的non-zealot people的比例
-    # zealot_moralities = [True]  # zealot是否全部moralizing
-    # identity_clustered = [True, False]  # 是否按identity进行clustered的初始化
-    # zealot_counts = [20]  # zealot的数量
-    # zealot_modes = ["none", "clustered", "random", "high-degree"]  # zealot的初始化配置
-
+    print(f"Using {num_processes} processes for parallel execution")
+    
     # 定义参数值范围
     morality_rates = [0, 0.3]  # moralizing的non-zealot people的比例
     zealot_moralities = [True]  # zealot是否全部moralizing
@@ -71,90 +170,75 @@ def run_parameter_sweep(
     if not os.path.exists(combined_dir):
         os.makedirs(combined_dir)
 
+    # 准备参数组合和配置信息
+    config_tuple = (runs_per_config, steps, initial_scale, base_seed, output_base_dir)
+    params_and_configs = [(params, config_tuple) for params in param_combinations]
+    
     # 收集所有参数组合的平均统计数据
     all_configs_stats = {}
     config_names = []
     
-    # 运行所有参数组合
-    for i, params in enumerate(tqdm(param_combinations, desc="Parameter combinations")):
-        morality_rate, zealot_morality, id_clustered, zealot_count, zealot_mode = params
-        
-        # 跳过无效组合：如果zealot_mode为"none"，但zealot_count不为0
-        if zealot_mode == "none" and zealot_count != 0:
-            zealot_count = 0  # 如果模式是"none"，强制将zealot数量设为0
-        
-        # 创建参数组合描述的文件夹名
-        folder_name = (
-            f"mor_{morality_rate:.1f}_"
-            f"zm_{'T' if zealot_morality else 'F'}_"
-            f"id_{'C' if id_clustered else 'R'}_"
-            f"zn_{zealot_count}_"
-            f"zm_{zealot_mode}"
-        )
-        
-        # 创建更易读的配置名称用于图表
-        mode_display = {
-            "none": "No Zealots",
-            "clustered": "Clustered",
-            "random": "Random",
-            "high-degree": "High-Degree"
-        }
-        readable_name = (
-            f"Morality Rate:{morality_rate:.1f};"
-            # f"Zealot Morality:{'T' if zealot_morality else 'F'};"
-            f"Identity:{'Clustered' if id_clustered else 'Random'};"
-            # f"Zealot Count:{zealot_count};"
-            f"Zealot Mode:{mode_display.get(zealot_mode, zealot_mode)}"
-        )
-        config_names.append(readable_name)
-        
-        # 输出目录
-        output_dir = os.path.join(output_base_dir, folder_name)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        # 记录开始时间
-        start_time = time.time()
-        print(f"\nRunning combination {i+1}/{len(param_combinations)}: {folder_name}")
-        
-        # 运行多次实验并求均值
-        try:
-            # 运行实验
-            avg_stats = run_zealot_parameter_experiment(
-                runs=runs_per_config,
-                steps=steps,
-                initial_scale=initial_scale,
-                morality_rate=morality_rate,
-                zealot_morality=zealot_morality,
-                identity_clustered=id_clustered,
-                zealot_count=zealot_count,
-                zealot_mode=zealot_mode,
-                base_seed=base_seed,
-                output_dir=output_dir
-            )
-            
-            # 记录结束时间和耗时
-            end_time = time.time()
-            elapsed = end_time - start_time
-            print(f"Completed in {elapsed:.1f} seconds")
-            
-            # 收集这个参数组合的平均统计数据
-            all_configs_stats[readable_name] = avg_stats
-            
-            # 记录进度到日志文件
-            with open(os.path.join(output_base_dir, "sweep_progress.log"), "a") as f:
-                f.write(f"Completed: {folder_name}, Time: {elapsed:.1f}s\n")
-                
-        except Exception as e:
-            print(f"Error running {folder_name}: {str(e)}")
-            # 记录错误到日志文件
-            with open(os.path.join(output_base_dir, "sweep_errors.log"), "a") as f:
-                f.write(f"Error in {folder_name}: {str(e)}\n")
+    # 使用多进程并行处理参数组合
+    print("\nStarting parallel processing of parameter combinations...")
+    
+    if num_processes > 1:
+        # 多进程版本
+        with Pool(processes=num_processes) as pool:
+            results = list(tqdm(
+                pool.imap(process_single_parameter_combination, params_and_configs),
+                total=len(params_and_configs),
+                desc="Processing combinations"
+            ))
+    else:
+        # 单进程版本（用于调试）
+        results = []
+        for params_and_config in tqdm(params_and_configs, desc="Processing combinations"):
+            results.append(process_single_parameter_combination(params_and_config))
+    
+    # 处理结果
+    for result in results:
+        if result['success']:
+            all_configs_stats[result['readable_name']] = result['avg_stats']
+            config_names.append(result['readable_name'])
+        else:
+            print(f"Failed to process combination: {result['folder_name']}")
+            print(f"Error: {result.get('error', 'Unknown error')}")
     
     # 绘制所有参数组合的综合对比图
     if len(all_configs_stats) > 1:
         print("\nGenerating combined comparative plots for all parameter combinations...")
         plot_combined_statistics(all_configs_stats, config_names, combined_dir, steps)
+    
+    # 合并各进程的日志文件
+    print("\nMerging log files from all processes...")
+    
+    # 合并进度日志
+    progress_log_file = os.path.join(output_base_dir, "sweep_progress.log")
+    with open(progress_log_file, "w") as merged_log:
+        for file_name in os.listdir(output_base_dir):
+            if file_name.startswith("sweep_progress_") and file_name.endswith(".log"):
+                process_log_file = os.path.join(output_base_dir, file_name)
+                with open(process_log_file, "r") as f:
+                    merged_log.write(f.read())
+                # 删除进程特定的日志文件
+                os.remove(process_log_file)
+    
+    # 合并错误日志
+    error_log_file = os.path.join(output_base_dir, "sweep_errors.log")
+    error_entries = []
+    for file_name in os.listdir(output_base_dir):
+        if file_name.startswith("sweep_errors_") and file_name.endswith(".log"):
+            process_error_file = os.path.join(output_base_dir, file_name)
+            with open(process_error_file, "r") as f:
+                error_entries.append(f.read())
+            # 删除进程特定的日志文件
+            os.remove(process_error_file)
+    
+    # 只有存在错误时才创建错误日志文件
+    if error_entries and any(entry.strip() for entry in error_entries):
+        with open(error_log_file, "w") as merged_error_log:
+            for entry in error_entries:
+                merged_error_log.write(entry)
     
     # 计算总用时
     total_end_time = time.time()
@@ -164,14 +248,17 @@ def run_parameter_sweep(
     
     print("\nParameter sweep completed!")
     print(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+    print(f"Processed {len(all_configs_stats)} successful combinations out of {len(param_combinations)} total combinations")
     
     # 记录总用时到日志文件
     with open(os.path.join(output_base_dir, "sweep_summary.log"), "w") as f:
         f.write(f"Parameter Sweep Summary\n")
         f.write(f"======================\n\n")
         f.write(f"Total parameter combinations: {len(param_combinations)}\n")
+        f.write(f"Successful combinations: {len(all_configs_stats)}\n")
         f.write(f"Runs per configuration: {runs_per_config}\n")
-        f.write(f"Total experiment runs: {len(param_combinations) * runs_per_config}\n\n")
+        f.write(f"Total experiment runs: {len(param_combinations) * runs_per_config}\n")
+        f.write(f"Processes used: {num_processes}\n\n")
         f.write(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s\n")
         
     return total_elapsed
@@ -555,10 +642,19 @@ def run_zealot_parameter_experiment(
 
 
 if __name__ == "__main__":
-    # 运行参数扫描实验
+    # 运行参数扫描实验（多进程版本）
+    # 
+    # 性能建议：
+    # - num_processes=None: 使用所有CPU核心（推荐）
+    # - num_processes=4: 使用4个进程
+    # - num_processes=1: 单进程模式（用于调试）
+    # 
+    # 注意：Windows系统需要确保此代码在 if __name__ == "__main__": 块中运行
+    
     run_parameter_sweep(
-        runs_per_config=10,  # 每种配置运行10次
-        steps=300,           # 每次运行1000步
+        runs_per_config=20,  # 每种配置运行10次
+        steps=300,           # 每次运行的步数（测试用，生产建议300+）
         initial_scale=0.1,   # 初始意见缩放到10%
-        base_seed=42         # 基础随机种子
+        base_seed=42,        # 基础随机种子
+        num_processes=None   # 使用所有CPU核心，或者设置为特定数值如4
     ) 
