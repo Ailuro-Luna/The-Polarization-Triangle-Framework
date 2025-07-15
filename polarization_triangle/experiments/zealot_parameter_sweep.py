@@ -6,8 +6,134 @@ import time
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, cpu_count
 from functools import partial
+import json
+import pickle
+import argparse
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
 from polarization_triangle.experiments.multi_zealot_experiment import run_multi_zealot_experiment, average_stats, plot_average_statistics, generate_average_heatmaps
+
+
+def save_experiment_data(all_configs_stats, config_names, experiment_params, output_dir):
+    """
+    保存实验数据到文件，用于后续绘图
+    
+    参数:
+    all_configs_stats -- 所有配置的统计数据
+    config_names -- 配置名称列表
+    experiment_params -- 实验参数
+    output_dir -- 输出目录
+    """
+    data_file = os.path.join(output_dir, "experiment_data.pkl")
+    metadata_file = os.path.join(output_dir, "experiment_metadata.json")
+    
+    # 保存主要数据（使用pickle以保持numpy数组等复杂数据结构）
+    with open(data_file, 'wb') as f:
+        pickle.dump({
+            'all_configs_stats': all_configs_stats,
+            'config_names': config_names,
+            'experiment_params': experiment_params
+        }, f)
+    
+    # 保存元数据（使用JSON便于人类阅读）
+    metadata = {
+        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'experiment_params': experiment_params,
+        'config_names': config_names,
+        'num_configurations': len(config_names),
+        'data_file': data_file
+    }
+    
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"Experiment data saved to {data_file}")
+    print(f"Experiment metadata saved to {metadata_file}")
+
+
+def load_experiment_data(data_dir):
+    """
+    从文件加载实验数据
+    
+    参数:
+    data_dir -- 数据目录
+    
+    返回:
+    tuple -- (all_configs_stats, config_names, experiment_params)
+    """
+    data_file = os.path.join(data_dir, "experiment_data.pkl")
+    metadata_file = os.path.join(data_dir, "experiment_metadata.json")
+    
+    if not os.path.exists(data_file):
+        raise FileNotFoundError(f"Data file not found: {data_file}")
+    
+    # 加载主要数据
+    with open(data_file, 'rb') as f:
+        data = pickle.load(f)
+    
+    # 加载元数据（可选）
+    metadata = None
+    if os.path.exists(metadata_file):
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+        print(f"Loaded experiment data from {metadata['timestamp']}")
+        print(f"Number of configurations: {metadata['num_configurations']}")
+    
+    return data['all_configs_stats'], data['config_names'], data['experiment_params']
+
+
+def generate_plots_from_data(all_configs_stats, config_names, experiment_params, output_dir):
+    """
+    从已有数据生成图表
+    
+    参数:
+    all_configs_stats -- 所有配置的统计数据
+    config_names -- 配置名称列表 
+    experiment_params -- 实验参数
+    output_dir -- 输出目录
+    """
+    # 创建综合结果目录
+    combined_dir = os.path.join(output_dir, "combined_results")
+    if not os.path.exists(combined_dir):
+        os.makedirs(combined_dir)
+    
+    # 获取步数参数
+    steps = experiment_params.get('steps', 300)
+    
+    # 绘制所有参数组合的综合对比图
+    if len(all_configs_stats) > 1:
+        print("\nGenerating combined comparative plots from loaded data...")
+        plot_combined_statistics(all_configs_stats, config_names, combined_dir, steps)
+    else:
+        print("Not enough data for combined plots (need at least 2 configurations)")
+    
+    print(f"Plots saved to {combined_dir}")
+
+
+def run_plot_only_mode(data_dir):
+    """
+    仅绘图模式：从已有数据生成图表
+    
+    参数:
+    data_dir -- 包含实验数据的目录
+    """
+    print("Running in plot-only mode...")
+    print(f"Loading data from: {data_dir}")
+    
+    try:
+        # 加载实验数据
+        all_configs_stats, config_names, experiment_params = load_experiment_data(data_dir)
+        
+        # 生成图表
+        generate_plots_from_data(all_configs_stats, config_names, experiment_params, data_dir)
+        
+        print("Plot-only mode completed successfully!")
+        
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        print("Make sure you have run the experiment first to generate data files.")
+    except Exception as e:
+        print(f"Error in plot-only mode: {e}")
+
 
 def process_single_parameter_combination(params_and_config):
     """
@@ -204,10 +330,23 @@ def run_parameter_sweep(
             print(f"Failed to process combination: {result['folder_name']}")
             print(f"Error: {result.get('error', 'Unknown error')}")
     
-    # 绘制所有参数组合的综合对比图
-    if len(all_configs_stats) > 1:
-        print("\nGenerating combined comparative plots for all parameter combinations...")
-        plot_combined_statistics(all_configs_stats, config_names, combined_dir, steps)
+    # 保存实验数据
+    experiment_params = {
+        'runs_per_config': runs_per_config,
+        'steps': steps,
+        'initial_scale': initial_scale,
+        'base_seed': base_seed,
+        'num_processes': num_processes,
+        'param_combinations_total': len(param_combinations),
+        'successful_combinations': len(all_configs_stats)
+    }
+    
+    print("\nSaving experiment data...")
+    save_experiment_data(all_configs_stats, config_names, experiment_params, output_base_dir)
+    
+    # 从保存的数据生成图表
+    print("\nGenerating plots from experiment data...")
+    generate_plots_from_data(all_configs_stats, config_names, experiment_params, output_base_dir)
     
     # 合并各进程的日志文件
     print("\nMerging log files from all processes...")
@@ -641,20 +780,113 @@ def run_zealot_parameter_experiment(
     return avg_stats
 
 
-if __name__ == "__main__":
-    # 运行参数扫描实验（多进程版本）
-    # 
-    # 性能建议：
-    # - num_processes=None: 使用所有CPU核心（推荐）
-    # - num_processes=4: 使用4个进程
-    # - num_processes=1: 单进程模式（用于调试）
-    # 
-    # 注意：Windows系统需要确保此代码在 if __name__ == "__main__": 块中运行
+def create_argument_parser():
+    """
+    创建命令行参数解析器
+    """
+    parser = argparse.ArgumentParser(
+        description="Zealot Parameter Sweep - 运行参数扫描实验或从已有数据生成图表",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  # 运行完整的参数扫描实验
+  python zealot_parameter_sweep.py
+  
+  # 运行实验，自定义参数
+  python zealot_parameter_sweep.py --runs 10 --steps 200 --processes 4
+  
+  # 仅从已有数据生成图表
+  python zealot_parameter_sweep.py --plot-only --data-dir results/zealot_parameter_sweep
+  
+  # 从特定目录生成图表
+  python zealot_parameter_sweep.py --plot-only --data-dir path/to/your/data
+        """
+    )
     
-    run_parameter_sweep(
-        runs_per_config=20,  # 每种配置运行10次
-        steps=300,           # 每次运行的步数（测试用，生产建议300+）
-        initial_scale=0.1,   # 初始意见缩放到10%
-        base_seed=42,        # 基础随机种子
-        num_processes=None   # 使用所有CPU核心，或者设置为特定数值如4
-    ) 
+    parser.add_argument(
+        '--plot-only', 
+        action='store_true',
+        help='仅绘图模式：从已有数据生成图表，不运行实验'
+    )
+    
+    parser.add_argument(
+        '--data-dir', 
+        type=str, 
+        default='results/zealot_parameter_sweep',
+        help='数据目录路径（默认: results/zealot_parameter_sweep）'
+    )
+    
+    parser.add_argument(
+        '--runs', 
+        type=int, 
+        default=20,
+        help='每种配置运行的次数（默认: 20）'
+    )
+    
+    parser.add_argument(
+        '--steps', 
+        type=int, 
+        default=300,
+        help='每次运行的模拟步数（默认: 300）'
+    )
+    
+    parser.add_argument(
+        '--initial-scale', 
+        type=float, 
+        default=0.1,
+        help='初始意见的缩放因子（默认: 0.1）'
+    )
+    
+    parser.add_argument(
+        '--base-seed', 
+        type=int, 
+        default=42,
+        help='基础随机种子（默认: 42）'
+    )
+    
+    parser.add_argument(
+        '--processes', 
+        type=int, 
+        default=None,
+        help='使用的进程数量（默认: None，使用所有CPU核心）'
+    )
+    
+    return parser
+
+
+if __name__ == "__main__":
+    # 解析命令行参数
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    
+    # 根据模式运行不同的功能
+    if args.plot_only:
+        # 仅绘图模式
+        print("=" * 50)
+        print("ZEALOT PARAMETER SWEEP - PLOT ONLY MODE")
+        print("=" * 50)
+        run_plot_only_mode(args.data_dir)
+    else:
+        # 完整实验模式
+        print("=" * 50)
+        print("ZEALOT PARAMETER SWEEP - FULL EXPERIMENT MODE")
+        print("=" * 50)
+        print(f"Configuration:")
+        print(f"  - Runs per config: {args.runs}")
+        print(f"  - Steps per run: {args.steps}")
+        print(f"  - Initial scale: {args.initial_scale}")
+        print(f"  - Base seed: {args.base_seed}")
+        print(f"  - Processes: {args.processes if args.processes else 'All CPU cores'}")
+        print(f"  - Output directory: {args.data_dir}")
+        print("-" * 50)
+        
+        # 运行参数扫描实验
+        # 注意：Windows系统需要确保此代码在 if __name__ == "__main__": 块中运行
+        run_parameter_sweep(
+            runs_per_config=args.runs,
+            steps=args.steps,
+            initial_scale=args.initial_scale,
+            base_seed=args.base_seed,
+            output_base_dir=args.data_dir,
+            num_processes=args.processes
+        ) 
