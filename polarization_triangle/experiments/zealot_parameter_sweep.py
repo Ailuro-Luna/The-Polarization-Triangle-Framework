@@ -13,50 +13,207 @@ from functools import partial
 import json
 import pickle
 import argparse
+import sys
+import gc
 from polarization_triangle.experiments.zealot_experiment import run_zealot_experiment
 from polarization_triangle.experiments.multi_zealot_experiment import run_multi_zealot_experiment, average_stats, plot_average_statistics, generate_average_heatmaps
 
 
-def save_experiment_data(all_configs_stats, config_names, experiment_params, output_dir):
+def get_object_size(obj):
+    """
+    获取对象在内存中的大小（以字节为单位）
+    
+    参数:
+    obj -- 要测量的对象
+    
+    返回:
+    int -- 对象大小（字节）
+    """
+    def get_size(obj, seen=None):
+        size = sys.getsizeof(obj)
+        if seen is None:
+            seen = set()
+        
+        obj_id = id(obj)
+        if obj_id in seen:
+            return 0
+        
+        # 标记已经处理过的对象
+        seen.add(obj_id)
+        
+        if isinstance(obj, dict):
+            size += sum([get_size(v, seen) for v in obj.values()])
+            size += sum([get_size(k, seen) for k in obj.keys()])
+        elif hasattr(obj, '__dict__'):
+            size += get_size(obj.__dict__, seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum([get_size(i, seen) for i in obj])
+        
+        return size
+    
+    return get_size(obj)
+
+
+def format_size(size_bytes):
+    """
+    格式化字节大小为人类可读的格式
+    
+    参数:
+    size_bytes -- 字节数
+    
+    返回:
+    str -- 格式化后的大小字符串
+    """
+    if size_bytes == 0:
+        return "0 B"
+    
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    
+    return f"{size_bytes:.2f} TB"
+
+
+def save_experiment_data(all_configs_stats, config_names, experiment_params, output_dir, max_size_mb=500):
     """
     保存实验数据到文件，用于后续绘图
+    如果数据太大，会自动分割保存
     
     参数:
     all_configs_stats -- 所有配置的统计数据
     config_names -- 配置名称列表
     experiment_params -- 实验参数
     output_dir -- 输出目录
+    max_size_mb -- 最大文件大小限制（MB），默认500MB
     """
-    data_file = os.path.join(output_dir, "experiment_data.pkl")
+    # 检查数据大小
+    total_size = get_object_size(all_configs_stats)
+    max_size_bytes = max_size_mb * 1024 * 1024
+    
+    print(f"数据总大小: {format_size(total_size)}")
+    print(f"配置数量: {len(all_configs_stats)}")
+    
     metadata_file = os.path.join(output_dir, "experiment_metadata.json")
     
-    # 保存主要数据（使用pickle以保持numpy数组等复杂数据结构）
-    with open(data_file, 'wb') as f:
-        pickle.dump({
-            'all_configs_stats': all_configs_stats,
-            'config_names': config_names,
-            'experiment_params': experiment_params
-        }, f)
-    
-    # 保存元数据（使用JSON便于人类阅读）
+    # 保存元数据
     metadata = {
         'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
         'experiment_params': experiment_params,
         'config_names': config_names,
         'num_configurations': len(config_names),
-        'data_file': data_file
+        'total_data_size_bytes': total_size,
+        'total_data_size_formatted': format_size(total_size),
+        'is_split': False,
+        'split_info': None
     }
     
+    if total_size <= max_size_bytes:
+        # 数据大小在限制范围内，直接保存
+        data_file = os.path.join(output_dir, "experiment_data.pkl")
+        
+        print(f"数据大小在限制范围内，直接保存到: {data_file}")
+        with open(data_file, 'wb') as f:
+            pickle.dump({
+                'all_configs_stats': all_configs_stats,
+                'config_names': config_names,
+                'experiment_params': experiment_params
+            }, f)
+        
+        metadata['data_file'] = data_file
+        
+    else:
+        # 数据太大，需要分割保存
+        print(f"数据大小 ({format_size(total_size)}) 超过限制 ({max_size_mb}MB)，进行分割保存...")
+        
+        # 计算每个配置的大小
+        config_sizes = []
+        for config_name in config_names:
+            if config_name in all_configs_stats:
+                config_size = get_object_size(all_configs_stats[config_name])
+                config_sizes.append((config_name, config_size))
+        
+        # 按大小排序，便于分组
+        config_sizes.sort(key=lambda x: x[1], reverse=True)
+        
+        # 分割数据
+        chunks = []
+        current_chunk = []
+        current_size = 0
+        
+        for config_name, config_size in config_sizes:
+            # 如果单个配置就超过限制，单独保存
+            if config_size > max_size_bytes:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = []
+                    current_size = 0
+                chunks.append([(config_name, config_size)])
+                print(f"警告: 配置 '{config_name}' 大小 ({format_size(config_size)}) 超过单文件限制")
+            elif current_size + config_size > max_size_bytes:
+                # 当前chunk已满，开始新chunk
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = [(config_name, config_size)]
+                current_size = config_size
+            else:
+                # 添加到当前chunk
+                current_chunk.append((config_name, config_size))
+                current_size += config_size
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        # 保存分割后的数据
+        split_files = []
+        for i, chunk in enumerate(chunks):
+            chunk_file = os.path.join(output_dir, f"experiment_data_part_{i+1}.pkl")
+            chunk_configs = [config_name for config_name, _ in chunk]
+            chunk_data = {config_name: all_configs_stats[config_name] for config_name in chunk_configs}
+            chunk_size = sum(config_size for _, config_size in chunk)
+            
+            print(f"保存分片 {i+1}/{len(chunks)}: {len(chunk_configs)} 个配置, 大小: {format_size(chunk_size)}")
+            
+            with open(chunk_file, 'wb') as f:
+                pickle.dump({
+                    'chunk_configs_stats': chunk_data,
+                    'chunk_config_names': chunk_configs,
+                    'chunk_index': i + 1,
+                    'total_chunks': len(chunks)
+                }, f)
+            
+            split_files.append({
+                'file': chunk_file,
+                'config_names': chunk_configs,
+                'config_count': len(chunk_configs),
+                'size_bytes': chunk_size,
+                'size_formatted': format_size(chunk_size)
+            })
+        
+        # 更新元数据
+        metadata['is_split'] = True
+        metadata['split_info'] = {
+            'total_chunks': len(chunks),
+            'split_files': split_files,
+            'max_size_mb': max_size_mb
+        }
+        
+        # 清理内存
+        del all_configs_stats
+        gc.collect()
+        
+        print(f"分割保存完成，共 {len(chunks)} 个文件")
+    
+    # 保存元数据
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
     
-    print(f"Experiment data saved to {data_file}")
-    print(f"Experiment metadata saved to {metadata_file}")
+    print(f"实验元数据保存到: {metadata_file}")
 
 
 def load_experiment_data(data_dir):
     """
-    从文件加载实验数据
+    从文件加载实验数据（支持分割文件）
     
     参数:
     data_dir -- 数据目录
@@ -64,25 +221,61 @@ def load_experiment_data(data_dir):
     返回:
     tuple -- (all_configs_stats, config_names, experiment_params)
     """
-    data_file = os.path.join(data_dir, "experiment_data.pkl")
     metadata_file = os.path.join(data_dir, "experiment_metadata.json")
     
-    if not os.path.exists(data_file):
-        raise FileNotFoundError(f"Data file not found: {data_file}")
+    if not os.path.exists(metadata_file):
+        raise FileNotFoundError(f"元数据文件未找到: {metadata_file}")
     
-    # 加载主要数据
-    with open(data_file, 'rb') as f:
-        data = pickle.load(f)
+    # 加载元数据
+    with open(metadata_file, 'r') as f:
+        metadata = json.load(f)
     
-    # 加载元数据（可选）
-    metadata = None
-    if os.path.exists(metadata_file):
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-        print(f"Loaded experiment data from {metadata['timestamp']}")
-        print(f"Number of configurations: {metadata['num_configurations']}")
+    print(f"加载实验数据，时间戳: {metadata['timestamp']}")
+    print(f"配置数量: {metadata['num_configurations']}")
+    print(f"数据大小: {metadata['total_data_size_formatted']}")
     
-    return data['all_configs_stats'], data['config_names'], data['experiment_params']
+    config_names = metadata['config_names']
+    experiment_params = metadata['experiment_params']
+    
+    if not metadata['is_split']:
+        # 单文件模式
+        data_file = metadata['data_file']
+        if not os.path.exists(data_file):
+            raise FileNotFoundError(f"数据文件未找到: {data_file}")
+        
+        print(f"从单文件加载数据: {data_file}")
+        with open(data_file, 'rb') as f:
+            data = pickle.load(f)
+        
+        all_configs_stats = data['all_configs_stats']
+        
+    else:
+        # 分割文件模式
+        split_info = metadata['split_info']
+        print(f"从 {split_info['total_chunks']} 个分割文件加载数据...")
+        
+        all_configs_stats = {}
+        
+        for i, file_info in enumerate(split_info['split_files']):
+            chunk_file = file_info['file']
+            if not os.path.exists(chunk_file):
+                raise FileNotFoundError(f"分割文件未找到: {chunk_file}")
+            
+            print(f"加载分片 {i+1}/{split_info['total_chunks']}: {file_info['config_count']} 个配置")
+            
+            with open(chunk_file, 'rb') as f:
+                chunk_data = pickle.load(f)
+            
+            # 合并数据
+            all_configs_stats.update(chunk_data['chunk_configs_stats'])
+            
+            # 清理内存
+            del chunk_data
+            gc.collect()
+        
+        print(f"分割文件加载完成，共加载 {len(all_configs_stats)} 个配置")
+    
+    return all_configs_stats, config_names, experiment_params
 
 
 def generate_plots_from_data(all_configs_stats, config_names, experiment_params, output_dir):
@@ -249,7 +442,10 @@ def run_parameter_sweep(
     initial_scale=0.1,
     base_seed=42,
     output_base_dir="results/zealot_parameter_sweep",
-    num_processes=None
+    num_processes=None,
+    max_size_mb=500,
+    optimize_data=True,
+    preserve_essential_only=False
 ):
     """
     运行参数扫描实验，测试不同参数组合（多进程版本）
@@ -261,6 +457,9 @@ def run_parameter_sweep(
     base_seed -- 基础随机种子
     output_base_dir -- 结果输出的基础目录
     num_processes -- 使用的进程数量，默认为None（使用CPU核心数）
+    max_size_mb -- 单个数据文件的最大大小限制（MB）
+    optimize_data -- 是否优化数据以减少内存占用
+    preserve_essential_only -- 是否只保留核心统计数据
     """
     # 记录总体开始时间
     total_start_time = time.time()
@@ -346,7 +545,15 @@ def run_parameter_sweep(
     }
     
     print("\nSaving experiment data...")
-    save_experiment_data(all_configs_stats, config_names, experiment_params, output_base_dir)
+    save_experiment_data_with_monitoring(
+        all_configs_stats, 
+        config_names, 
+        experiment_params, 
+        output_base_dir,
+        max_size_mb=max_size_mb,
+        optimize_data=optimize_data,
+        preserve_essential_only=preserve_essential_only
+    )
     
     # 从保存的数据生成图表
     print("\nGenerating plots from experiment data...")
@@ -1072,7 +1279,174 @@ def create_argument_parser():
         help='使用的进程数量（默认: None，使用所有CPU核心）'
     )
     
+    parser.add_argument(
+        '--max-size-mb', 
+        type=int, 
+        default=500,
+        help='单个数据文件的最大大小限制（MB）（默认: 500）'
+    )
+    
+    parser.add_argument(
+        '--no-optimize', 
+        action='store_true',
+        help='禁用数据优化功能'
+    )
+    
+    parser.add_argument(
+        '--essential-only', 
+        action='store_true',
+        help='只保留核心统计数据以最大化节省内存'
+    )
+    
     return parser
+
+
+def monitor_memory_usage():
+    """
+    监控当前进程的内存使用情况
+    
+    返回:
+    dict -- 包含内存使用信息的字典
+    """
+    import psutil
+    import os
+    
+    try:
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        
+        return {
+            'rss_mb': memory_info.rss / (1024 * 1024),  # 常驻内存
+            'vms_mb': memory_info.vms / (1024 * 1024),  # 虚拟内存
+            'percent': process.memory_percent(),         # 内存使用百分比
+            'available_mb': psutil.virtual_memory().available / (1024 * 1024)  # 可用内存
+        }
+    except ImportError:
+        # 如果没有psutil，返回基本信息
+        return {
+            'rss_mb': 0,
+            'vms_mb': 0,
+            'percent': 0,
+            'available_mb': 0
+        }
+
+
+def optimize_config_stats(config_stats, preserve_essential_only=False):
+    """
+    优化配置统计数据，减少内存占用
+    
+    参数:
+    config_stats -- 配置统计数据
+    preserve_essential_only -- 是否只保留核心统计数据
+    
+    返回:
+    dict -- 优化后的统计数据
+    """
+    if not config_stats:
+        return config_stats
+    
+    # 核心统计数据列表
+    essential_stats = [
+        'mean_opinions',
+        'non_zealot_variance', 
+        'polarization_index',
+        'identity_1_mean_opinions',
+        'identity_neg1_mean_opinions',
+        'identity_opinion_differences'
+    ]
+    
+    # 可选统计数据列表
+    optional_stats = [
+        'mean_abs_opinions',
+        'cluster_variance',
+        'negative_counts',
+        'negative_means',
+        'positive_counts',
+        'positive_means',
+        'community_variance_history',
+        'communities'
+    ]
+    
+    optimized_stats = {}
+    
+    for mode_name, mode_data in config_stats.items():
+        if preserve_essential_only:
+            # 只保留核心统计数据
+            optimized_mode_data = {}
+            for stat_key in essential_stats:
+                if stat_key in mode_data:
+                    optimized_mode_data[stat_key] = mode_data[stat_key]
+        else:
+            # 保留所有数据，但进行压缩
+            optimized_mode_data = {}
+            for stat_key, stat_data in mode_data.items():
+                if isinstance(stat_data, (list, np.ndarray)):
+                    # 转换为numpy数组以节省内存
+                    optimized_mode_data[stat_key] = np.array(stat_data, dtype=np.float32)
+                else:
+                    optimized_mode_data[stat_key] = stat_data
+        
+        optimized_stats[mode_name] = optimized_mode_data
+    
+    return optimized_stats
+
+
+def save_experiment_data_with_monitoring(all_configs_stats, config_names, experiment_params, output_dir, 
+                                        max_size_mb=500, optimize_data=True, preserve_essential_only=False):
+    """
+    保存实验数据，包含内存监控和数据优化
+    
+    参数:
+    all_configs_stats -- 所有配置的统计数据
+    config_names -- 配置名称列表
+    experiment_params -- 实验参数
+    output_dir -- 输出目录
+    max_size_mb -- 最大文件大小限制（MB）
+    optimize_data -- 是否优化数据以减少内存占用
+    preserve_essential_only -- 是否只保留核心统计数据
+    """
+    print("\n=== 内存使用情况监控 ===")
+    initial_memory = monitor_memory_usage()
+    print(f"保存前内存使用: {initial_memory['rss_mb']:.2f} MB ({initial_memory['percent']:.2f}%)")
+    print(f"可用内存: {initial_memory['available_mb']:.2f} MB")
+    
+    # 数据优化
+    if optimize_data:
+        print("\n=== 数据优化 ===")
+        print("正在优化数据结构以减少内存占用...")
+        
+        optimized_stats = {}
+        for config_name in config_names:
+            if config_name in all_configs_stats:
+                optimized_stats[config_name] = optimize_config_stats(
+                    all_configs_stats[config_name], 
+                    preserve_essential_only=preserve_essential_only
+                )
+        
+        # 替换原始数据
+        all_configs_stats = optimized_stats
+        
+        # 强制垃圾回收
+        gc.collect()
+        
+        after_optimization_memory = monitor_memory_usage()
+        print(f"优化后内存使用: {after_optimization_memory['rss_mb']:.2f} MB ({after_optimization_memory['percent']:.2f}%)")
+        memory_saved = initial_memory['rss_mb'] - after_optimization_memory['rss_mb']
+        print(f"节省内存: {memory_saved:.2f} MB")
+    
+    # 检查是否有足够内存进行保存操作
+    current_memory = monitor_memory_usage()
+    if current_memory['available_mb'] < 1000:  # 如果可用内存少于1GB
+        print(f"警告: 可用内存较少 ({current_memory['available_mb']:.2f} MB)")
+        print("建议关闭其他应用程序或使用更小的数据集")
+    
+    # 调用原始保存函数
+    save_experiment_data(all_configs_stats, config_names, experiment_params, output_dir, max_size_mb)
+    
+    # 最终内存检查
+    final_memory = monitor_memory_usage()
+    print(f"\n=== 保存完成后内存使用情况 ===")
+    print(f"最终内存使用: {final_memory['rss_mb']:.2f} MB ({final_memory['percent']:.2f}%)")
 
 
 if __name__ == "__main__":
@@ -1099,6 +1473,9 @@ if __name__ == "__main__":
         print(f"  - Base seed: {args.base_seed}")
         print(f"  - Processes: {args.processes if args.processes else 'All CPU cores'}")
         print(f"  - Output directory: {args.data_dir}")
+        print(f"  - Max file size: {args.max_size_mb} MB")
+        print(f"  - Data optimization: {'Disabled' if args.no_optimize else 'Enabled'}")
+        print(f"  - Essential only: {'Yes' if args.essential_only else 'No'}")
         print("-" * 50)
         
         # 运行参数扫描实验
@@ -1109,5 +1486,8 @@ if __name__ == "__main__":
             initial_scale=args.initial_scale,
             base_seed=args.base_seed,
             output_base_dir=args.data_dir,
-            num_processes=args.processes
+            num_processes=args.processes,
+            max_size_mb=args.max_size_mb,
+            optimize_data=not args.no_optimize,
+            preserve_essential_only=args.essential_only
         ) 
