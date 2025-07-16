@@ -1,3 +1,7 @@
+# 使用：
+# python -m polarization_triangle.experiments.zealot_parameter_sweep --runs 10 --steps 300
+# python -m polarization_triangle.experiments.zealot_parameter_sweep --plot-only
+
 import os
 import numpy as np
 import itertools
@@ -405,7 +409,7 @@ def run_parameter_sweep(
 
 def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps):
     """
-    绘制所有参数组合的综合对比图
+    绘制所有参数组合的综合对比图（使用 Small Multiples 分面设计）
     
     参数:
     all_configs_stats -- 包含所有参数组合平均统计数据的字典
@@ -421,7 +425,6 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
     # 统计数据键列表
     stat_keys = [
         ("mean_opinions", "Mean Opinion", "Mean Opinion Value"),
-        # ("mean_abs_opinions", "Mean |Opinion|", "Mean Absolute Opinion Value"),  # 删除：不需要的图表
         ("non_zealot_variance", "Non-Zealot Variance", "Opinion Variance (Excluding Zealots)"),
         ("cluster_variance", "Cluster Variance", "Mean Opinion Variance within Clusters"),
         ("negative_counts", "Negative Counts", "Number of Agents with Negative Opinions"),
@@ -429,18 +432,311 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         ("positive_counts", "Positive Counts", "Number of Agents with Positive Opinions"),
         ("positive_means", "Positive Means", "Mean Value of Positive Opinions"),
         ("polarization_index", "Polarization Index", "Polarization Index"),
-        # 新增identity相关统计 - 删除单独的identity统计，只保留特殊处理的综合图表
-        # ("identity_1_mean_opinions", "Identity +1 Mean Opinion", "Mean Opinion for Identity +1"),  # 删除：不需要的图表
-        # ("identity_neg1_mean_opinions", "Identity -1 Mean Opinion", "Mean Opinion for Identity -1"),  # 删除：不需要的图表
-        # ("identity_opinion_differences", "Identity Opinion Difference", "Opinion Difference between Identities")  # 删除：不需要的图表
     ]
     
-    # 使用不同颜色和线型
-    # 确保有足够多的颜色和线型组合
-    colors = plt.cm.tab20(np.linspace(0, 1, min(20, len(config_names))))
-    linestyles = ['-', '--', '-.', ':'] * 5  # 重复以确保足够
+    # 解析配置名称，按 Zealot Mode 分组
+    def parse_config_name(config_name):
+        parts = config_name.split(';')
+        morality_rate = float(parts[0].split(':')[1])
+        identity_type = parts[1].split(':')[1]
+        zealot_mode = parts[2].split(':')[1]
+        return morality_rate, identity_type, zealot_mode
     
-    step_values = range(steps)
+    # 按 Zealot Mode 分组数据
+    zealot_modes = ["No Zealots", "Clustered", "Random", "High-Degree"]
+    grouped_data = {mode: {} for mode in zealot_modes}
+    
+    for config_name in config_names:
+        if config_name in all_configs_stats:
+            try:
+                morality_rate, identity_type, zealot_mode = parse_config_name(config_name)
+                
+                # 创建简化的标签
+                simple_label = f"Morality {morality_rate:.1f}, Identity {identity_type}"
+                
+                # 获取数据
+                if "without Zealots" in all_configs_stats[config_name]:
+                    mode_data = all_configs_stats[config_name]["without Zealots"]
+                elif len(all_configs_stats[config_name]) > 0:
+                    mode_key = list(all_configs_stats[config_name].keys())[0]
+                    mode_data = all_configs_stats[config_name][mode_key]
+                else:
+                    continue
+                
+                grouped_data[zealot_mode][simple_label] = mode_data
+                
+            except (IndexError, ValueError, KeyError) as e:
+                print(f"Warning: Could not parse config name '{config_name}': {e}")
+                continue
+    
+    # 定义颜色和线型
+    color_style_map = {
+        "Morality 0.0, Identity Clustered": ('#1f77b4', '-'),    # 蓝色实线
+        "Morality 0.0, Identity Random": ('#1f77b4', '--'),      # 蓝色虚线
+        "Morality 0.3, Identity Clustered": ('#ff7f0e', '-'),    # 橙色实线
+        "Morality 0.3, Identity Random": ('#ff7f0e', '--'),      # 橙色虚线
+    }
+    
+    # 绘制每种统计数据的分面图
+    for stat_key, stat_label, stat_title in stat_keys:
+        # 检查是否有这个统计数据
+        has_stat_data = any(
+            any(stat_key in mode_data for mode_data in group_data.values())
+            for group_data in grouped_data.values()
+        )
+        
+        if not has_stat_data:
+            continue
+        
+        # 创建 2×2 分面图
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(f'Comparison of {stat_title} by Zealot Mode', fontsize=16, y=0.98)
+        
+        # 展平 axes 数组以便于索引
+        axes_flat = axes.flatten()
+        
+        # 为每个 Zealot Mode 绘制子图
+        for i, zealot_mode in enumerate(zealot_modes):
+            ax = axes_flat[i]
+            
+            # 绘制该 Zealot Mode 下的所有配置
+            for config_label, mode_data in grouped_data[zealot_mode].items():
+                if stat_key in mode_data:
+                    data = mode_data[stat_key]
+                    color, linestyle = color_style_map.get(config_label, ('#666666', '-'))
+                    
+                    ax.plot(
+                        range(len(data)), 
+                        data, 
+                        label=config_label,
+                        color=color,
+                        linestyle=linestyle,
+                        linewidth=1.5
+                    )
+            
+            # 设置子图属性
+            ax.set_title(f'{zealot_mode}', fontsize=14, fontweight='bold')
+            ax.set_xlabel('Step', fontsize=12)
+            ax.set_ylabel(stat_label, fontsize=12)
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=10)
+            
+            # 统一 y 轴范围（可选）
+            if i == 0:
+                y_min, y_max = ax.get_ylim()
+            else:
+                current_y_min, current_y_max = ax.get_ylim()
+                y_min = min(y_min, current_y_min)
+                y_max = max(y_max, current_y_max)
+        
+        # 统一所有子图的 y 轴范围
+        for ax in axes_flat:
+            ax.set_ylim(y_min, y_max)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(stats_dir, f"{stat_key}.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Generated faceted plot for {stat_key}")
+    
+    # 生成identity相关的分面图
+    generate_faceted_identity_plots(grouped_data, stats_dir, color_style_map)
+    
+    # 同时保留原始的综合对比图（可选）
+    generate_legacy_combined_plots(all_configs_stats, config_names, stats_dir, steps, stat_keys)
+
+
+def generate_faceted_identity_plots(grouped_data, stats_dir, color_style_map):
+    """
+    生成identity相关的分面图
+    """
+    # 检查是否有identity数据
+    has_identity_data = any(
+        any("identity_1_mean_opinions" in mode_data for mode_data in group_data.values())
+        for group_data in grouped_data.values()
+    )
+    
+    if not has_identity_data:
+        return
+    
+    # 生成identity平均意见分面图
+    zealot_modes = ["No Zealots", "Clustered", "Random", "High-Degree"]
+    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
+    fig.suptitle('Comparison of Mean Opinions by Identity and Zealot Mode', fontsize=16, y=0.98)
+    axes_flat = axes.flatten()
+    
+    for i, zealot_mode in enumerate(zealot_modes):
+        ax = axes_flat[i]
+        
+        # 为每个配置绘制两条线（Identity +1 和 Identity -1）
+        for config_label, mode_data in grouped_data[zealot_mode].items():
+            if "identity_1_mean_opinions" in mode_data and "identity_neg1_mean_opinions" in mode_data:
+                color, base_linestyle = color_style_map.get(config_label, ('#666666', '-'))
+                
+                # Identity +1 (使用base_linestyle，无marker)
+                data_1 = mode_data["identity_1_mean_opinions"]
+                ax.plot(
+                    range(len(data_1)), 
+                    data_1, 
+                    label=f'{config_label} - Identity +1',
+                    color=color,
+                    linestyle=base_linestyle,
+                    linewidth=1.5
+                )
+                
+                # Identity -1 (使用base_linestyle，添加明显的marker)
+                data_neg1 = mode_data["identity_neg1_mean_opinions"]
+                ax.plot(
+                    range(len(data_neg1)), 
+                    data_neg1, 
+                    label=f'{config_label} - Identity -1',
+                    color=color,
+                    linestyle=base_linestyle,
+                    marker='o',
+                    markersize=3,
+                    markevery=10,  # 每10个点显示一个marker
+                    linewidth=1.5
+                )
+        
+        ax.set_title(f'{zealot_mode}', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Step', fontsize=12)
+        ax.set_ylabel('Mean Opinion', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(stats_dir, "identity_mean_opinions.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # 生成identity意见差值绝对值分面图
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Comparison of Absolute Mean Opinion Differences between Identities', fontsize=16, y=0.98)
+    axes_flat = axes.flatten()
+    
+    for i, zealot_mode in enumerate(zealot_modes):
+        ax = axes_flat[i]
+        
+        for config_label, mode_data in grouped_data[zealot_mode].items():
+            if "identity_opinion_differences" in mode_data:
+                color, linestyle = color_style_map.get(config_label, ('#666666', '-'))
+                
+                # 计算绝对值
+                differences = mode_data["identity_opinion_differences"]
+                abs_differences = [abs(diff) for diff in differences]
+                
+                ax.plot(
+                    range(len(abs_differences)), 
+                    abs_differences, 
+                    label=config_label,
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=1.5
+                )
+        
+        ax.set_title(f'{zealot_mode}', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Step', fontsize=12)
+        ax.set_ylabel('|Mean Opinion Difference|', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(stats_dir, "identity_opinion_differences_abs.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print("Generated identity plots")
+
+
+def generate_legacy_identity_plots(all_configs_stats, config_names, legacy_dir, colors, linestyles):
+    """
+    生成传统的identity相关图表
+    """
+    # 检查是否有identity数据
+    has_identity_data = False
+    for config_name in config_names:
+        if config_name in all_configs_stats:
+            for mode_key in all_configs_stats[config_name]:
+                if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
+                    has_identity_data = True
+                    break
+            if has_identity_data:
+                break
+    
+    if not has_identity_data:
+        return
+    
+    # 绘制两种identity的平均opinion综合对比图
+    plt.figure(figsize=(20, 10))
+    for i, config_name in enumerate(config_names):
+        if config_name in all_configs_stats:
+            mode_key = list(all_configs_stats[config_name].keys())[0]
+            if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
+                # Identity = 1的平均opinion（实线）
+                data_1 = all_configs_stats[config_name][mode_key]["identity_1_mean_opinions"]
+                plt.plot(
+                    range(len(data_1)), 
+                    data_1, 
+                    label=f'{config_name} - Identity +1',
+                    color=colors[i % len(colors)], 
+                    linestyle='-'
+                )
+                # Identity = -1的平均opinion（虚线）
+                data_neg1 = all_configs_stats[config_name][mode_key]["identity_neg1_mean_opinions"]
+                plt.plot(
+                    range(len(data_neg1)), 
+                    data_neg1, 
+                    label=f'{config_name} - Identity -1',
+                    color=colors[i % len(colors)], 
+                    linestyle='--'
+                )
+    
+    plt.xlabel('Step')
+    plt.ylabel('Mean Opinion')
+    plt.title('Comparison of Mean Opinions by Identity across All Parameter Combinations')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(legacy_dir, "combined_identity_mean_opinions.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # 绘制identity意见差值绝对值综合对比图
+    plt.figure(figsize=(15, 10))
+    for i, config_name in enumerate(config_names):
+        if config_name in all_configs_stats:
+            mode_key = list(all_configs_stats[config_name].keys())[0]
+            if "identity_opinion_differences" in all_configs_stats[config_name][mode_key]:
+                # 计算绝对值
+                differences = all_configs_stats[config_name][mode_key]["identity_opinion_differences"]
+                abs_differences = [abs(diff) for diff in differences]
+                plt.plot(
+                    range(len(abs_differences)), 
+                    abs_differences, 
+                    label=config_name,
+                    color=colors[i % len(colors)], 
+                    linestyle=linestyles[i % len(linestyles)]
+                )
+    
+    plt.xlabel('Step')
+    plt.ylabel('|Mean Opinion Difference|')
+    plt.title('Comparison of Absolute Mean Opinion Differences between Identities')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(legacy_dir, "combined_identity_opinion_differences_abs.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def generate_legacy_combined_plots(all_configs_stats, config_names, stats_dir, steps, stat_keys):
+    """
+    生成传统的综合对比图（所有线条在一个图中）
+    """
+    # 创建子目录
+    legacy_dir = os.path.join(stats_dir, "legacy_combined")
+    if not os.path.exists(legacy_dir):
+        os.makedirs(legacy_dir)
+    
+    # 使用不同颜色和线型
+    colors = plt.cm.tab20(np.linspace(0, 1, min(20, len(config_names))))
+    linestyles = ['-', '--', '-.', ':'] * 5
     
     # 绘制每种统计数据的综合图
     for stat_key, stat_label, stat_title in stat_keys:
@@ -448,12 +744,10 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         has_stat_data = False
         for config_name in config_names:
             if config_name in all_configs_stats:
-                # 对于zealot_mode为"none"的情况
                 if "without Zealots" in all_configs_stats[config_name]:
                     if stat_key in all_configs_stats[config_name]["without Zealots"]:
                         has_stat_data = True
                         break
-                # 对于其他模式
                 elif len(all_configs_stats[config_name]) > 0:
                     mode_name = list(all_configs_stats[config_name].keys())[0]
                     if stat_key in all_configs_stats[config_name][mode_name]:
@@ -468,7 +762,6 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         # 为每个参数组合绘制一条线
         for i, config_name in enumerate(config_names):
             if config_name in all_configs_stats:
-                # 对于zealot_mode为"none"的情况，我们只有"without Zealots"模式
                 if "without Zealots" in all_configs_stats[config_name]:
                     if stat_key in all_configs_stats[config_name]["without Zealots"]:
                         data = all_configs_stats[config_name]["without Zealots"][stat_key]
@@ -479,9 +772,7 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
                             color=colors[i % len(colors)], 
                             linestyle=linestyles[i % len(linestyles)]
                         )
-                # 对于其他模式，可以选择使用到的模式
                 elif len(all_configs_stats[config_name]) > 0:
-                    # 选择第一个可用的模式
                     mode_name = list(all_configs_stats[config_name].keys())[0]
                     if stat_key in all_configs_stats[config_name][mode_name]:
                         data = all_configs_stats[config_name][mode_name][stat_key]
@@ -499,81 +790,11 @@ def plot_combined_statistics(all_configs_stats, config_names, output_dir, steps)
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(os.path.join(stats_dir, f"combined_{stat_key}.png"), dpi=300)
+        plt.savefig(os.path.join(legacy_dir, f"combined_{stat_key}.png"), dpi=300, bbox_inches='tight')
         plt.close()
     
-    # 特殊处理：绘制identity综合对比图
-    # 检查是否有identity数据
-    has_identity_data = False
-    for config_name in config_names:
-        if config_name in all_configs_stats:
-            for mode_key in all_configs_stats[config_name]:
-                if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
-                    has_identity_data = True
-                    break
-            if has_identity_data:
-                break
-    
-    if has_identity_data:
-        # 绘制两种identity的平均opinion综合对比图
-        plt.figure(figsize=(20, 10))
-        for i, config_name in enumerate(config_names):
-            if config_name in all_configs_stats:
-                mode_key = list(all_configs_stats[config_name].keys())[0]
-                if "identity_1_mean_opinions" in all_configs_stats[config_name][mode_key]:
-                    # Identity = 1的平均opinion（实线）
-                    data_1 = all_configs_stats[config_name][mode_key]["identity_1_mean_opinions"]
-                    plt.plot(
-                        range(len(data_1)), 
-                        data_1, 
-                        label=f'{config_name} - Identity +1',
-                        color=colors[i % len(colors)], 
-                        linestyle='-'
-                    )
-                    # Identity = -1的平均opinion（虚线）
-                    data_neg1 = all_configs_stats[config_name][mode_key]["identity_neg1_mean_opinions"]
-                    plt.plot(
-                        range(len(data_neg1)), 
-                        data_neg1, 
-                        label=f'{config_name} - Identity -1',
-                        color=colors[i % len(colors)], 
-                        linestyle='--'
-                    )
-        
-        plt.xlabel('Step')
-        plt.ylabel('Mean Opinion')
-        plt.title('Comparison of Mean Opinions by Identity across All Parameter Combinations')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(stats_dir, "combined_identity_mean_opinions.png"), dpi=300)
-        plt.close()
-        
-        # 绘制identity意见差值绝对值综合对比图
-        plt.figure(figsize=(15, 10))
-        for i, config_name in enumerate(config_names):
-            if config_name in all_configs_stats:
-                mode_key = list(all_configs_stats[config_name].keys())[0]
-                if "identity_opinion_differences" in all_configs_stats[config_name][mode_key]:
-                    # 计算绝对值
-                    differences = all_configs_stats[config_name][mode_key]["identity_opinion_differences"]
-                    abs_differences = [abs(diff) for diff in differences]
-                    plt.plot(
-                        range(len(abs_differences)), 
-                        abs_differences, 
-                        label=config_name,
-                        color=colors[i % len(colors)], 
-                        linestyle=linestyles[i % len(linestyles)]
-                    )
-        
-        plt.xlabel('Step')
-        plt.ylabel('|Mean Opinion Difference|')
-        plt.title('Comparison of Absolute Mean Opinion Differences between Identities')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(stats_dir, "combined_identity_opinion_differences_abs.png"), dpi=300)
-        plt.close()
+    # 在legacy目录中也生成identity相关的图表
+    generate_legacy_identity_plots(all_configs_stats, config_names, legacy_dir, colors, linestyles)
     
     # 保存综合数据到CSV文件
     csv_file = os.path.join(stats_dir, "combined_statistics.csv")
